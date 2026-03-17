@@ -4,7 +4,14 @@ A modern, responsive web application for streaming music directly from Cloudflar
 
 ## 🖼️ Preview
 
+### Desktop Main View Dashboard
 ![Main Interface](docs/screenshots/main_view.png)
+
+### Playlist Tracking Grid
+![Playlist View](docs/screenshots/playlist_view.png)
+
+### Now Playing Overlay Screen
+![Now Playing Panel](docs/screenshots/now_playing.png)
 
 ## 🌟 Features
 

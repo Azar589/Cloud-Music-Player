@@ -101,10 +101,10 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
 
 const MainView = () => {
   const { playTrack, currentTrack, isPlaying, togglePlay, setQueue, recentlyPlayed } = useAudioPlayer();
-  const { 
-    isLoading, loadError, allTracks, folders, artistMap, 
+  const {
+    isLoading, loadError, allTracks, folders, artistMap,
     activeView, viewParam, navigate, goBack, canGoBack,
-    showNowPlaying, setShowNowPlaying 
+    showNowPlaying, setShowNowPlaying
   } = useApp();
   const { playlists } = usePlaylists();
   const [recentCardSize, setRecentCardSize] = useState(160);
@@ -228,7 +228,7 @@ const MainView = () => {
       {showNowPlaying && (
         <NowPlayingPanel onClose={() => setShowNowPlaying(false)} />
       )}
-      
+
       <div className="mv-topbar">
         {canGoBack && (
           <button className="nav-arrow-btn" onClick={goBack} title="Go back">
@@ -242,7 +242,7 @@ const MainView = () => {
         {isLoading ? (
           <div className="track-loading">
             <div className="loading-spinner" />
-            <p>Loading your Cloud Songs...</p>
+            <p>Loading Your Songs...</p>
           </div>
         ) : loadError ? (
           <p className="track-error">⚠ {loadError}</p>
