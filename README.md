@@ -2,6 +2,10 @@
 
 A modern, responsive web application for streaming music directly from Cloudflare R2 storage. Designed with a premium aesthetic and rich features for a seamless listening experience.
 
+## 🖼️ Preview
+
+![Main Interface](docs/screenshots/main_view.png)
+
 ## 🌟 Features
 
 -   **Dynamic Ambient Background**: Uses current track art to create an immersive listening atmosphere.
@@ -27,7 +31,7 @@ To run the application locally:
     ```
 3.  **Start Dev Server**:
     ```bash
-    npm run dev
+    npm.cmd run dev
     ```
     *The app will be available at [http://localhost:5173](http://localhost:5173)*
 
