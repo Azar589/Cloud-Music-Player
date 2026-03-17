@@ -1,0 +1,654 @@
+/* ── Now Playing Embedded View ── */
+.np-overlay {
+  position: absolute;
+  /* relative to app-container or main-view */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  /* Above main view lists, but under sidebar if sidebar has higher z-index */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 14, 0.7);
+  /* dark semi-transparent tint */
+  backdrop-filter: blur(24px) saturate(1.2);
+  /* strong blur to hide text */
+  animation: np-fade-in 0.3s ease;
+}
+
+@keyframes np-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.np-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 40px;
+  z-index: 1;
+  /* Removed dark box background and borders */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* We don't need the extra blurred bg inside the panel anymore because App.jsx handles it */
+.np-bg {
+  display: none;
+}
+
+.np-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+  z-index: 100;
+  /* Ensure it stays above everything */
+  pointer-events: auto;
+}
+
+.np-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transform: scale(1.1);
+}
+
+/* ── Vinyl Turntable ── */
+.np-turntable {
+  position: relative;
+  margin-top: 32px;
+  width: 240px;
+  height: 240px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* The spinning vinyl disc */
+.vinyl-disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #1a1a1a 0%, #111 60%, #222 62%, #111 63%, #0d0d0d 100%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.85),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+
+/* Concentric groove rings */
+.vinyl-groove {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.g1 {
+  width: 95%;
+  height: 95%;
+}
+
+.g2 {
+  width: 82%;
+  height: 82%;
+}
+
+.g3 {
+  width: 69%;
+  height: 69%;
+}
+
+.g4 {
+  width: 56%;
+  height: 56%;
+}
+
+/* Center label */
+.vinyl-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 38%;
+  height: 38%;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vinyl-label-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Spindle hole */
+.vinyl-spindle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+/* Spinning animation — always applied, paused/running by state */
+.vinyl-disc {
+  animation: vinyl-spin 3s linear infinite;
+  animation-play-state: paused;
+  /* default: stopped in place */
+}
+
+.vinyl-disc.spinning {
+  animation-play-state: running;
+}
+
+@keyframes vinyl-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Tonearm Wrapper */
+.tonearm-wrap {
+  position: absolute;
+  top: -15px;
+  right: -130px;
+  width: 140px;
+  height: 180px;
+  transform-origin: 40px 40px;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.tonearm-wrap.arm-off {
+  transform: rotate(-15deg);
+  /* resting position */
+}
+
+.tonearm-wrap.arm-on {
+  transform: rotate(20deg);
+  /* playing position */
+}
+
+/* ── Pivot Base (The big gray circle assembly) ── */
+.tonearm-base {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #333333;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.tonearm-base-inner {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #111111;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.tonearm-base-ring {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2a2a2a;
+  border: 4px solid #7a7a7a;
+  /* metallic ring */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+}
+
+/* little screw/dot on the right side of the base */
+.tonearm-base-dot {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #222;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Top Counterweight ── */
+.tonearm-counterweight {
+  position: absolute;
+  top: -15px;
+  left: 32px;
+  width: 16px;
+  height: 24px;
+  background: #b5b5b5;
+  /* silver connector */
+  z-index: 2;
+}
+
+.tonearm-counterweight::after {
+  content: '';
+  position: absolute;
+  top: -24px;
+  left: -8px;
+  width: 32px;
+  height: 24px;
+  background: #222222;
+  border-radius: 2px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Main Arm (Segment 1 straight down) ── */
+.tonearm-segment-1 {
+  position: absolute;
+  top: 54px;
+  left: 34px;
+  width: 12px;
+  height: 60px;
+  background: #111111;
+  z-index: 2;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+}
+
+/* Beige accent connector on Segment 1 */
+.tonearm-segment-1::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
+  background: #e6d0ba;
+  /* beige part */
+}
+
+/* ── Main Arm (Segment 2 angled left) ── */
+.tonearm-segment-2 {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 0;
+  width: 12px;
+  height: 50px;
+  background: #111111;
+  transform-origin: 50% 2px;
+  transform: rotate(38deg);
+  /* Angle towards center */
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+}
+
+/* ── Cartridge Head / Needle ── */
+.tonearm-head {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 1px;
+  width: 10px;
+  height: 45px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 2px;
+  transform: rotate(-12deg);
+  /* head is angled back slightly */
+}
+
+.tonearm-head-connector {
+  width: 8px;
+  height: 12px;
+  background: #333333;
+}
+
+.tonearm-head-connector::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: -1px;
+  width: 12px;
+  height: 4px;
+  background: #b5b5b5;
+}
+
+.tonearm-head-body {
+  width: 18px;
+  height: 26px;
+  background: #111111;
+  border-radius: 2px;
+  box-shadow: 2px 4px 6px rgba(0, 0, 0, 0.6);
+  position: relative;
+  overflow: hidden;
+  margin-top: -2px;
+}
+
+/* 2 silver lines on the headshell */
+.tonearm-needle-lines {
+  position: absolute;
+  bottom: 6px;
+  left: 4px;
+  right: 4px;
+  height: 6px;
+  background: transparent;
+  border-top: 2px solid #b5b5b5;
+  border-bottom: 2px solid #b5b5b5;
+  box-sizing: border-box;
+}
+
+/* Track info */
+.np-info {
+  width: 100%;
+  margin-top: 28px;
+  text-align: center;
+}
+
+.np-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.np-artist {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+}
+
+/* Seekbar */
+.np-seekbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 28px;
+}
+
+.np-time {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.np-time:last-child {
+  text-align: right;
+}
+
+.np-seekbar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+  transition: height 0.2s;
+}
+
+.np-seekbar:hover {
+  height: 6px;
+}
+
+.np-seekbar-fill {
+  height: 100%;
+  background: #8b3dff;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(139, 61, 255, 0.5);
+  transition: width 0.1s linear;
+}
+
+.np-seekbar-handle {
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.np-seekbar:hover .np-seekbar-handle {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Controls */
+.np-controls {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 28px;
+}
+
+.np-ctrl-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.np-ctrl-btn:hover {
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.np-ctrl-btn.ctrl-active {
+  color: #ff0055;
+  filter: drop-shadow(0 0 6px rgba(255, 0, 85, 0.4));
+}
+
+.np-skip-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.np-skip-btn:hover {
+  color: #fff;
+  transform: scale(1.12);
+}
+
+.np-play-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.np-play-wrap.is-playing::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: #8b3dff;
+  opacity: 0.3;
+  filter: blur(10px);
+  animation: pulse-glow 2.5s infinite alternate ease-in-out;
+  z-index: -1;
+}
+
+.np-play-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #8b3dff;
+  color: #fff;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(139, 61, 255, 0.5);
+  transition: background 0.2s, transform 0.1s;
+}
+
+.np-play-btn:hover {
+  background: #7a2eee;
+  transform: scale(1.06);
+}
+
+.np-play-btn:active {
+  transform: scale(0.95);
+}
+
+/* ── Secondary Controls (Volume, Queue, Menu) ── */
+.np-secondary-controls {
+  position: absolute;
+  bottom: 32px;
+  left: 32px;
+  right: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  padding-top: 0;
+}
+
+.np-volume-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+}
+
+.np-vol-btn {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  transition: color 0.2s;
+}
+
+.np-vol-btn:hover {
+  color: var(--text-primary);
+}
+
+.np-vol-slider {
+  width: 100px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding-bottom: 4px;
+}
+
+.np-vol-bg {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  position: relative;
+}
+
+.np-vol-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: var(--text-primary);
+  background: #8b3dff;
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.np-vol-slider:hover .np-vol-fill {
+  background: #8b3dff;
+  /* Accent on hover */
+}
+
+.np-vol-handle {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.np-vol-slider:hover .np-vol-handle {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+.np-tool-btn-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.np-tool-btn {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  transition: color 0.2s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  /* give slight breathing room for click */
+}
+
+.np-tool-btn:hover {
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.np-tool-btn:hover {
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
