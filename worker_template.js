@@ -22,6 +22,269 @@ function getMimeType(key) {
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
+async function runScan(env, force = false) {
+  console.log("Starting Free Metadata Scan...");
+
+  if (!env.MUSIC_BUCKET || !env.DB) {
+    console.log("⚠️ Bucket or DB Binding Missing. Skipping Indexing.");
+    return;
+  }
+
+  try {
+    let allObjects = [];
+    let cursor = undefined;
+
+    // 1. Get all files in R2 Bucket
+    do {
+      const objects = await env.MUSIC_BUCKET.list({ cursor });
+      allObjects.push(...objects.objects);
+      cursor = objects.truncated ? objects.cursor : undefined;
+    } while (cursor);
+
+    // Filter out non-audio files
+    const validExtensions = ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'aac'];
+    const audioObjects = allObjects.filter(obj => {
+      const ext = obj.key.split('.').pop().toLowerCase();
+      const isInternal = obj.key.startsWith('_') || obj.key.includes('/_') || obj.key.startsWith('.') || obj.key.includes('/.');
+      return validExtensions.includes(ext) && !isInternal;
+    });
+
+    console.log(`Scanning ${audioObjects.length} files...`);
+
+    for (const item of audioObjects) {
+      try {
+        // 2. Check if file key already exists, but re-scan if it's missing details
+        const exists = await env.DB.prepare("SELECT id, artist, coverUrl FROM tracks WHERE id = ?").bind(item.key).first();
+
+        // Force re-scan if `force` is true, or if metadata is missing/generic
+        const forceScan = force; 
+        if (forceScan || !exists || exists.artist === 'Unknown Artist' || !exists.coverUrl || exists.coverUrl.includes('/api/cover') || exists.coverUrl.includes('yourworker.workers.dev')) {
+          console.log(`Found new file to index: ${item.key}`);
+
+          const filename = item.key.split('/').pop();
+          const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+
+          let artist = "Unknown Artist";
+          let title = nameWithoutExt;
+          let coverUrl = undefined;
+
+          if (nameWithoutExt.includes(" - ")) {
+            const parts = nameWithoutExt.split(" - ");
+            artist = parts[0].trim();
+            title = parts.slice(1).join(" - ").trim();
+          }
+
+          // ── 🛡️ Light Pure JS Binary Reader for FLAC/MP3 ──
+          try {
+            const file = await env.MUSIC_BUCKET.get(item.key, { range: { offset: 0, length: 1048576 } }); // Fetch first 1MB
+            if (file) {
+              const buffer = await file.arrayBuffer();
+              const view = new DataView(buffer);
+              const header = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+
+              // ── FLAC Parser ────────────────────────────────
+              if (header === 'fLaC') {
+                let offset = 4;
+                let isLast = false;
+                while (!isLast && offset < buffer.byteLength - 4) {
+                  const blockHeader = view.getUint8(offset);
+                  isLast = (blockHeader & 0x80) !== 0;
+                  const blockType = blockHeader & 0x7F;
+                  const blockSize = (view.getUint8(offset + 1) << 16) | (view.getUint8(offset + 2) << 8) | view.getUint8(offset + 3);
+                  offset += 4;
+
+                  if (blockType === 4 && offset + blockSize <= buffer.byteLength) { // VORBIS_COMMENT
+                    const vendorLen = view.getUint32(offset, true);
+                    let listOffset = offset + 4 + vendorLen;
+                    const commentListLen = view.getUint32(listOffset, true);
+                    listOffset += 4;
+
+                    const decoder = new TextDecoder('utf-8');
+                    for (let i = 0; i < commentListLen; i++) {
+                      if (listOffset + 4 > buffer.byteLength) break;
+                      const len = view.getUint32(listOffset, true);
+                      listOffset += 4;
+                      const comment = decoder.decode(new Uint8Array(buffer, listOffset, len));
+                      listOffset += len;
+
+                      if (comment.toUpperCase().startsWith('ARTIST=')) artist = comment.split('=')[1].trim();
+                      if (comment.toUpperCase().startsWith('TITLE=')) title = comment.split('=')[1].trim();
+                    }
+                  }
+                  else if (blockType === 6) { // PICTURE
+                    try {
+                      let picBuffer = buffer;
+                      let picView = view;
+                      let currOffset = offset;
+
+                      if (offset + blockSize > buffer.byteLength) {
+                        const fullFile = await env.MUSIC_BUCKET.get(item.key, { range: { offset: offset - 4, length: blockSize + 4 } });
+                        if (fullFile) {
+                          picBuffer = await fullFile.arrayBuffer();
+                          picView = new DataView(picBuffer);
+                          currOffset = 4;
+                        }
+                      }
+
+                      let picOffset = currOffset + 4; // Skip Type
+                      const mimeLen = picView.getUint32(picOffset); picOffset += 4;
+                      let mimeType = '';
+                      for (let i = 0; i < mimeLen; i++) {
+                        mimeType += String.fromCharCode(picView.getUint8(picOffset + i));
+                      }
+                      if (!mimeType) mimeType = 'image/jpeg';
+                      if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+
+                      picOffset += mimeLen;
+
+                      const descLen = picView.getUint32(picOffset); picOffset += 4 + descLen + 16; // skip desc, width, height, depth, colors
+                      const dataLen = picView.getUint32(picOffset); picOffset += 4;
+
+                      if (picOffset + dataLen <= picBuffer.byteLength) {
+                        const picBytes = new Uint8Array(picBuffer, picOffset, dataLen);
+                        try {
+                          const coverKey = `_covers/${item.key}`;
+                          await env.MUSIC_BUCKET.put(coverKey, picBytes, {
+                            httpMetadata: { contentType: mimeType || 'image/jpeg' }
+                          });
+                          coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
+                        } catch (picErr) {
+                          console.error("FLAC Cover R2 Save Failed:", picErr);
+                        }
+                      }
+                    } catch (e) {
+                      console.error("Picture extraction failed:", e);
+                    }
+                  }
+
+                  offset += blockSize;
+                }
+              } else if (header.startsWith('ID3')) { // ── MP3/ID3v2 Parser ─────────
+                try {
+                  const majorVersion = view.getUint8(3);
+                  let offset = 10; // Skip 10-byte ID3v2 header
+
+                  const tagSize = ((view.getUint8(6) & 0x7F) << 21) |
+                    ((view.getUint8(7) & 0x7F) << 14) |
+                    ((view.getUint8(8) & 0x7F) << 7) |
+                    (view.getUint8(9) & 0x7F);
+
+                  while (offset < tagSize + 10 && offset < buffer.byteLength - 10) {
+                    const frameID = String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+
+                    let frameSize = 0;
+                    if (majorVersion === 4) { // Synchsafe size in v2.4
+                      frameSize = ((view.getUint8(offset + 4) & 0x7F) << 21) |
+                        ((view.getUint8(offset + 5) & 0x7F) << 14) |
+                        ((view.getUint8(offset + 6) & 0x7F) << 7) |
+                        (view.getUint8(offset + 7) & 0x7F);
+                    } else { // Standard 32-bit integer in v2.3
+                      frameSize = view.getUint32(offset + 4);
+                    }
+
+                    offset += 10; // Skip 10-byte frame header
+
+                    if (offset + frameSize > buffer.byteLength) break;
+
+                    const frameData = new Uint8Array(buffer, offset, frameSize);
+
+                    const decodeID3 = (data) => {
+                      if (!data || data.length < 2) return '';
+                      const enc = data[0];
+                      const bytes = data.subarray(1);
+                      if (enc === 1) { // UTF-16
+                        // Has BOM?
+                        if (bytes.length >= 2 && ((bytes[0] === 0xFF && bytes[1] === 0xFE) || (bytes[0] === 0xFE && bytes[1] === 0xFF))) {
+                          return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim();
+                        }
+                        // Broken tag (missing BOM) masquerading as UTF-16 -> fallback to ISO-8859-1
+                        return new TextDecoder('iso-8859-1').decode(bytes).replace(/\0/g, '').trim();
+                      } else if (enc === 0) { // ISO-8859-1
+                        return new TextDecoder('iso-8859-1').decode(bytes).replace(/\0/g, '').trim();
+                      } else if (enc === 2) { // UTF-16BE
+                        try { return new TextDecoder('utf-16be').decode(bytes).replace(/\0/g, '').trim(); }
+                        catch (e) { return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim(); }
+                      }
+                      return new TextDecoder('utf-8').decode(bytes).replace(/\0/g, '').trim();
+                    };
+
+                    if (frameID === 'TIT2') {
+                      const raw = decodeID3(frameData);
+                      if (raw) title = raw;
+                    } else if (frameID === 'TPE1') {
+                      const raw = decodeID3(frameData);
+                      if (raw) artist = raw;
+                    } else if (frameID === 'APIC') {
+                      const textEncoding = frameData[0];
+                      let picOffset = 1; // Skip encoding
+
+                      let mimeStart = picOffset;
+                      while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
+                      let mimeType = '';
+                      for (let i = mimeStart; i < picOffset; i++) {
+                        mimeType += String.fromCharCode(frameData[i]);
+                      }
+                      if (!mimeType) mimeType = 'image/jpeg';
+                      if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+                      if (mimeType === '-->') mimeType = 'image/jpeg';
+
+                      picOffset++; // Skip null terminator
+                      picOffset++; // Skip picture type
+
+                      if (textEncoding === 1 || textEncoding === 2) {
+                        while (picOffset < frameData.length - 1 && (frameData[picOffset] !== 0 || frameData[picOffset + 1] !== 0)) {
+                          picOffset++;
+                        }
+                        picOffset += 2; // Skip double null
+                      } else {
+                        while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
+                        picOffset++; // Skip single null
+                      }
+
+                      if (picOffset < frameData.length) {
+                        const picBytes = frameData.subarray(picOffset);
+                        try {
+                          const coverKey = `_covers/${item.key}`;
+                          await env.MUSIC_BUCKET.put(coverKey, picBytes, {
+                            httpMetadata: { contentType: mimeType || 'image/jpeg' }
+                          });
+                          coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
+                        } catch (picErr) {
+                          console.error("MP3 Cover R2 Save Failed:", picErr);
+                        }
+                      }
+                    }
+
+                    offset += frameSize;
+                  }
+                } catch (e) {
+                  console.error("ID3 Parse Error:", e);
+                }
+              }
+            }
+          } catch (err) { console.error("Binary Parse Fail:", err); }
+
+          const trackUrl = `${env.STREAM_DOMAIN || 'https://yourworker.workers.dev'}/api/stream?key=${encodeURIComponent(item.key)}`;
+
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO tracks (id, title, artist, url, format, coverUrl, has_metadata)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+          `).bind(item.key, title, artist, trackUrl, item.key.split('.').pop().toUpperCase(), coverUrl || null).run();
+
+          console.log(`✅ Indexed (With Meta): ${item.key}`);
+        }
+      } catch (err) {
+        console.error(`❌ Indexing failed for ${item.key}:`, err);
+      }
+    }
+
+    console.log("✅ Scan Complete.");
+
+  } catch (err) {
+    console.error("❌ Scheduled Scan crashed:", err);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -256,7 +519,7 @@ export default {
     if (url.pathname === '/api/scan') {
       try {
         const force = url.searchParams.get('force') === 'true';
-        await this.scheduled({ cron: force ? 'force_scan' : undefined }, env, {});
+        await runScan(env, force);
         const response = Response.json({ success: true, message: `Scan Completed ${force ? '(Forced)' : ''}` });
         for (const [key, value] of Object.entries(corsHeaders)) {
           response.headers.set(key, value);
@@ -304,265 +567,6 @@ export default {
 
   // ── 🕒 2. Free Cron Trigger Handler (Scheduled Scan) ──────────────────
   async scheduled(event, env, ctx) {
-    console.log("Starting Free Metadata Scan...");
-
-    if (!env.MUSIC_BUCKET || !env.DB) {
-      console.log("⚠️ Bucket or DB Binding Missing. Skipping Indexing.");
-      return;
-    }
-
-    try {
-      let allObjects = [];
-      let cursor = undefined;
-
-      // 1. Get all files in R2 Bucket
-      do {
-        const objects = await env.MUSIC_BUCKET.list({ cursor });
-        allObjects.push(...objects.objects);
-        cursor = objects.truncated ? objects.cursor : undefined;
-      } while (cursor);
-
-      // Filter out non-audio files
-      const validExtensions = ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'aac'];
-      const audioObjects = allObjects.filter(obj => {
-        const ext = obj.key.split('.').pop().toLowerCase();
-        const isInternal = obj.key.startsWith('_') || obj.key.includes('/_') || obj.key.startsWith('.') || obj.key.includes('/.');
-        return validExtensions.includes(ext) && !isInternal;
-      });
-
-      console.log(`Scanning ${audioObjects.length} files...`);
-
-      for (const item of audioObjects) {
-        try {
-          // 2. Check if file key already exists, but re-scan if it's missing details
-          const exists = await env.DB.prepare("SELECT id, artist, coverUrl FROM tracks WHERE id = ?").bind(item.key).first();
-
-          // Force re-scan if `force_scan` is true, or if metadata is missing/generic
-          const forceScan = true; // Check for a custom event property
-          if (forceScan || !exists || exists.artist === 'Unknown Artist' || !exists.coverUrl || exists.coverUrl.includes('/api/cover') || exists.coverUrl.includes('yourworker.workers.dev')) {
-            console.log(`Found new file to index: ${item.key}`);
-
-            const filename = item.key.split('/').pop();
-            const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-
-            let artist = "Unknown Artist";
-            let title = nameWithoutExt;
-            let coverUrl = undefined;
-
-            if (nameWithoutExt.includes(" - ")) {
-              const parts = nameWithoutExt.split(" - ");
-              artist = parts[0].trim();
-              title = parts.slice(1).join(" - ").trim();
-            }
-
-            // ── 🛡️ Light Pure JS Binary Reader for FLAC/MP3 ──
-            try {
-              const file = await env.MUSIC_BUCKET.get(item.key, { range: { offset: 0, length: 1048576 } }); // Fetch first 1MB
-              if (file) {
-                const buffer = await file.arrayBuffer();
-                const view = new DataView(buffer);
-                const header = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
-
-                // ── FLAC Parser ────────────────────────────────
-                if (header === 'fLaC') {
-                  let offset = 4;
-                  let isLast = false;
-                  while (!isLast && offset < buffer.byteLength - 4) {
-                    const blockHeader = view.getUint8(offset);
-                    isLast = (blockHeader & 0x80) !== 0;
-                    const blockType = blockHeader & 0x7F;
-                    const blockSize = (view.getUint8(offset + 1) << 16) | (view.getUint8(offset + 2) << 8) | view.getUint8(offset + 3);
-                    offset += 4;
-
-                    if (blockType === 4 && offset + blockSize <= buffer.byteLength) { // VORBIS_COMMENT
-                      const vendorLen = view.getUint32(offset, true);
-                      let listOffset = offset + 4 + vendorLen;
-                      const commentListLen = view.getUint32(listOffset, true);
-                      listOffset += 4;
-
-                      const decoder = new TextDecoder('utf-8');
-                      for (let i = 0; i < commentListLen; i++) {
-                        if (listOffset + 4 > buffer.byteLength) break;
-                        const len = view.getUint32(listOffset, true);
-                        listOffset += 4;
-                        const comment = decoder.decode(new Uint8Array(buffer, listOffset, len));
-                        listOffset += len;
-
-                        if (comment.toUpperCase().startsWith('ARTIST=')) artist = comment.split('=')[1].trim();
-                        if (comment.toUpperCase().startsWith('TITLE=')) title = comment.split('=')[1].trim();
-                      }
-                    }
-                    else if (blockType === 6) { // PICTURE
-                      try {
-                        let picBuffer = buffer;
-                        let picView = view;
-                        let currOffset = offset;
-
-                        if (offset + blockSize > buffer.byteLength) {
-                          const fullFile = await env.MUSIC_BUCKET.get(item.key, { range: { offset: offset - 4, length: blockSize + 4 } });
-                          if (fullFile) {
-                            picBuffer = await fullFile.arrayBuffer();
-                            picView = new DataView(picBuffer);
-                            currOffset = 4;
-                          }
-                        }
-
-                        let picOffset = currOffset + 4; // Skip Type
-                        const mimeLen = picView.getUint32(picOffset); picOffset += 4;
-                        let mimeType = '';
-                        for (let i = 0; i < mimeLen; i++) {
-                          mimeType += String.fromCharCode(picView.getUint8(picOffset + i));
-                        }
-                        if (!mimeType) mimeType = 'image/jpeg';
-                        if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
-
-                        picOffset += mimeLen;
-
-                        const descLen = picView.getUint32(picOffset); picOffset += 4 + descLen + 16; // skip desc, width, height, depth, colors
-                        const dataLen = picView.getUint32(picOffset); picOffset += 4;
-
-                        if (picOffset + dataLen <= picBuffer.byteLength) {
-                          const picBytes = new Uint8Array(picBuffer, picOffset, dataLen);
-                          try {
-                            const coverKey = `_covers/${item.key}`;
-                            await env.MUSIC_BUCKET.put(coverKey, picBytes, {
-                              httpMetadata: { contentType: mimeType || 'image/jpeg' }
-                            });
-                            coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
-                          } catch (picErr) {
-                            console.error("FLAC Cover R2 Save Failed:", picErr);
-                          }
-                        }
-                      } catch (e) {
-                        console.error("Picture extraction failed:", e);
-                      }
-                    }
-
-                    offset += blockSize;
-                  }
-                } else if (header.startsWith('ID3')) { // ── MP3/ID3v2 Parser ─────────
-                  try {
-                    const majorVersion = view.getUint8(3);
-                    let offset = 10; // Skip 10-byte ID3v2 header
-
-                    const tagSize = ((view.getUint8(6) & 0x7F) << 21) |
-                      ((view.getUint8(7) & 0x7F) << 14) |
-                      ((view.getUint8(8) & 0x7F) << 7) |
-                      (view.getUint8(9) & 0x7F);
-
-                    while (offset < tagSize + 10 && offset < buffer.byteLength - 10) {
-                      const frameID = String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
-
-                      let frameSize = 0;
-                      if (majorVersion === 4) { // Synchsafe size in v2.4
-                        frameSize = ((view.getUint8(offset + 4) & 0x7F) << 21) |
-                          ((view.getUint8(offset + 5) & 0x7F) << 14) |
-                          ((view.getUint8(offset + 6) & 0x7F) << 7) |
-                          (view.getUint8(offset + 7) & 0x7F);
-                      } else { // Standard 32-bit integer in v2.3
-                        frameSize = view.getUint32(offset + 4);
-                      }
-
-                      offset += 10; // Skip 10-byte frame header
-
-                      if (offset + frameSize > buffer.byteLength) break;
-
-                      const frameData = new Uint8Array(buffer, offset, frameSize);
-
-                      const decodeID3 = (data) => {
-                        if (!data || data.length < 2) return '';
-                        const enc = data[0];
-                        const bytes = data.subarray(1);
-                        if (enc === 1) { // UTF-16
-                          // Has BOM?
-                          if (bytes.length >= 2 && ((bytes[0] === 0xFF && bytes[1] === 0xFE) || (bytes[0] === 0xFE && bytes[1] === 0xFF))) {
-                            return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim();
-                          }
-                          // Broken tag (missing BOM) masquerading as UTF-16 -> fallback to ISO-8859-1
-                          return new TextDecoder('iso-8859-1').decode(bytes).replace(/\0/g, '').trim();
-                        } else if (enc === 0) { // ISO-8859-1
-                          return new TextDecoder('iso-8859-1').decode(bytes).replace(/\0/g, '').trim();
-                        } else if (enc === 2) { // UTF-16BE
-                          try { return new TextDecoder('utf-16be').decode(bytes).replace(/\0/g, '').trim(); }
-                          catch (e) { return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim(); }
-                        }
-                        return new TextDecoder('utf-8').decode(bytes).replace(/\0/g, '').trim();
-                      };
-
-                      if (frameID === 'TIT2') {
-                        const raw = decodeID3(frameData);
-                        if (raw) title = raw;
-                      } else if (frameID === 'TPE1') {
-                        const raw = decodeID3(frameData);
-                        if (raw) artist = raw;
-                      } else if (frameID === 'APIC') {
-                        const textEncoding = frameData[0];
-                        let picOffset = 1; // Skip encoding
-
-                        let mimeStart = picOffset;
-                        while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
-                        let mimeType = '';
-                        for (let i = mimeStart; i < picOffset; i++) {
-                          mimeType += String.fromCharCode(frameData[i]);
-                        }
-                        if (!mimeType) mimeType = 'image/jpeg';
-                        if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
-                        if (mimeType === '-->') mimeType = 'image/jpeg';
-
-                        picOffset++; // Skip null terminator
-                        picOffset++; // Skip picture type
-
-                        if (textEncoding === 1 || textEncoding === 2) {
-                          while (picOffset < frameData.length - 1 && (frameData[picOffset] !== 0 || frameData[picOffset + 1] !== 0)) {
-                            picOffset++;
-                          }
-                          picOffset += 2; // Skip double null
-                        } else {
-                          while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
-                          picOffset++; // Skip single null
-                        }
-
-                        if (picOffset < frameData.length) {
-                          const picBytes = frameData.subarray(picOffset);
-                          try {
-                            const coverKey = `_covers/${item.key}`;
-                            await env.MUSIC_BUCKET.put(coverKey, picBytes, {
-                              httpMetadata: { contentType: mimeType || 'image/jpeg' }
-                            });
-                            coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
-                          } catch (picErr) {
-                            console.error("MP3 Cover R2 Save Failed:", picErr);
-                          }
-                        }
-                      }
-
-                      offset += frameSize;
-                    }
-                  } catch (e) {
-                    console.error("ID3 Parse Error:", e);
-                  }
-                }
-              }
-            } catch (err) { console.error("Binary Parse Fail:", err); }
-
-            const trackUrl = `${env.STREAM_DOMAIN || 'https://yourworker.workers.dev'}/api/stream?key=${encodeURIComponent(item.key)}`;
-
-            await env.DB.prepare(`
-              INSERT OR REPLACE INTO tracks (id, title, artist, url, format, coverUrl, has_metadata)
-              VALUES (?, ?, ?, ?, ?, ?, 1)
-            `).bind(item.key, title, artist, trackUrl, item.key.split('.').pop().toUpperCase(), coverUrl || null).run();
-
-            console.log(`✅ Indexed (With Meta): ${item.key}`);
-          }
-        } catch (err) {
-          console.error(`❌ Indexing failed for ${item.key}:`, err);
-        }
-      }
-
-      console.log("✅ Scan Complete.");
-
-    } catch (err) {
-      console.error("❌ Scheduled Scan crashed:", err);
-    }
+    await runScan(env, event?.cron === 'force_scan');
   }
 };

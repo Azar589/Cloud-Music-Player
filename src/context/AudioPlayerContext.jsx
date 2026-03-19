@@ -7,9 +7,7 @@ export const useAudioPlayer = () => useContext(AudioPlayerContext);
 export const AudioPlayerProvider = ({ children }) => {
   const audioRef = useRef(null);
   if (audioRef.current === null) {
-    const a = new Audio();
-    a.crossOrigin = 'anonymous';
-    audioRef.current = a;
+    audioRef.current = new Audio();
   }
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
@@ -93,6 +91,20 @@ export const AudioPlayerProvider = ({ children }) => {
     };
   }, []);
 
+  // Cleanup audio element on unmount
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+        if (audio._objectUrl) {
+          URL.revokeObjectURL(audio._objectUrl);
+        }
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const audio = audioRef.current;
     audio.volume = volume;
@@ -137,6 +149,11 @@ export const AudioPlayerProvider = ({ children }) => {
       }
     };
     const handleError = () => {
+      // Ignore errors caused by empty src or placeholder (cleanup/mobile unlock)
+      const srcAttr = audio.getAttribute('src');
+      if (!srcAttr || srcAttr === 'about:blank') {
+        return;
+      }
       console.error('Audio element error:', audio.error);
       setIsPlaying(false);
     };
@@ -220,6 +237,13 @@ export const AudioPlayerProvider = ({ children }) => {
           if (response.status === 401) throw new Error('AUTH_EXPIRED');
           throw new Error(`HTTP error: ${response.status}`);
         }
+
+        const contentType = response.headers.get('Content-Type');
+        if (contentType && (contentType.includes('text/html') || contentType.includes('application/json'))) {
+          const text = await response.text();
+          throw new Error(`Not an audio file (Type: ${contentType}). Body: ${text.slice(0, 100)}`);
+        }
+
         const blob = await response.blob();
         setIsDownloading(false);
 
@@ -278,12 +302,6 @@ export const AudioPlayerProvider = ({ children }) => {
   const playTrack = async (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     
-    // ── Unlock Audio for Mobile Browsers ──
-    // Triggering synchronous play prevents async fetch hops from breaking user interaction flags.
-    try {
-      audioRef.current.src = 'about:blank'; 
-      audioRef.current.play().catch(() => {});
-    } catch (e) {}
 
     await _loadAndPlay(track);
   };
