@@ -45,7 +45,7 @@ const Sidebar = () => {
       {/* Search */}
       <div className="sidebar-search">
         <BiSearchAlt className="s-icon" />
-        <input type="text" placeholder="Search tracks..." />
+        <input type="text" id="sidebar-search-input" name="search" placeholder="Search tracks..." />
       </div>
 
       {/* Main nav */}
@@ -80,6 +80,8 @@ const Sidebar = () => {
           <form className="new-playlist-form" onSubmit={handleCreatePlaylist}>
             <input
               type="text"
+              id="new-playlist-name-input"
+              name="playlistName"
               placeholder="Playlist name..."
               value={newPlaylistName}
               onChange={e => setNewPlaylistName(e.target.value)}

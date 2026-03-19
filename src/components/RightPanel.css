@@ -39,14 +39,7 @@
 }
 .see-all-btn:hover { color: var(--text-primary); }
 
-/* Tags */
-.tags-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
 
-.tag-pill {
 /* ── Now Playing (Large Area) ── */
 .now-playing-large {
   display: flex;
@@ -239,5 +232,4 @@
 .featured-add-btn:hover, .featured-play-btn:hover {
   background: var(--accent-primary);
   transform: scale(1.1);
-}
 }
