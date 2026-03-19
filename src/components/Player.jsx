@@ -50,13 +50,16 @@ const Player = () => {
     e.preventDefault();
     if (draggedIdx === null || draggedIdx === targetIdx) return;
 
-    const visibleQueue = currentTrack ? queue.filter(t => t.id !== currentTrack.id) : queue;
+    const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
+    const visibleQueue = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
     const newItems = [...visibleQueue];
     const draggedItem = newItems[draggedIdx];
     newItems.splice(draggedIdx, 1);
     newItems.splice(targetIdx, 0, draggedItem);
 
-    const fullQueue = currentTrack ? [currentTrack, ...newItems] : newItems;
+    const fullQueue = currentIdx !== -1 
+      ? [...queue.slice(0, currentIdx + 1), ...newItems] 
+      : (currentTrack ? [currentTrack, ...newItems] : newItems);
     setQueue(fullQueue);
     setDraggedIdx(null);
   };
@@ -222,9 +225,10 @@ const Player = () => {
                 )}
 
                 {/* 2. Scrollable / Draggable rest */}
-                {queue
-                  .filter(t => t.id !== currentTrack?.id)
-                  .map((t, idx) => (
+                {(() => {
+                  const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
+                  const nextUp = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
+                  return nextUp.map((t, idx) => (
                     <div
                       key={t.id}
                       className="queue-item draggable"
@@ -243,7 +247,8 @@ const Player = () => {
                         <FaBars />
                       </div>
                     </div>
-                  ))}
+                  ));
+                })()}
 
                 {queue.length === 0 && <div className="queue-empty">Your queue is empty.</div>}
               </div>

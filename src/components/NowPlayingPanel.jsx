@@ -32,7 +32,7 @@ const NowPlayingPanel = ({ onClose }) => {
   const [draggedIdx, setDraggedIdx] = useState(null);
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
-  const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : [];
+  const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
 
   const handleDragStart = (e, idx) => {
     setDraggedIdx(idx);
