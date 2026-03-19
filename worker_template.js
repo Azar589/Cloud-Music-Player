@@ -58,7 +58,8 @@ export default {
       const validExtensions = Object.keys(MIME_TYPES);
       const audioObjects = allObjects.filter(obj => {
         const ext = obj.key.split('.').pop().toLowerCase();
-        return validExtensions.includes(ext);
+        const isInternal = obj.key.startsWith('_') || obj.key.includes('/_') || obj.key.startsWith('.') || obj.key.includes('/.');
+        return validExtensions.includes(ext) && !isInternal;
       });
 
       let dbMeta = {};
@@ -130,7 +131,14 @@ export default {
           // Use duration from D1 if loaded
           durationStr: indexed?.durationStr || undefined,
           durationMs: indexed?.durationMs || undefined,
-          coverUrl: indexed?.coverUrl || null,
+          coverUrl: (() => {
+            let cUrl = indexed?.coverUrl;
+            if (!cUrl) return null;
+            if (cUrl.includes('yourworker.workers.dev')) {
+              cUrl = cUrl.replace(/^https?:\/\/yourworker\.workers\.dev/, "");
+            }
+            return cUrl.startsWith('/') ? `${url.origin}${cUrl}` : cUrl;
+          })(),
           folderId: folderId,
           folderName: folderName
         };
@@ -164,41 +172,96 @@ export default {
       streamHeaders.set('Content-Type', getMimeType(key)); // Strictly set MIME
 
       try {
-        const file = await env.MUSIC_BUCKET.get(key);
-        if (!file) return new Response("File Not Found", { status: 404, headers: corsHeaders });
-
-        const size = file.size;
-
-        // Handle Range Requests properly
         if (rangeHeader) {
-          const parts = rangeHeader.replace(/bytes=/, "").split("-");
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
+          const probe = await env.MUSIC_BUCKET.get(key, { range: { offset: 0, length: 1 } });
+          if (!probe) return new Response("File Not Found", { status: 404, headers: corsHeaders });
+          const size = probe.size;
+          probe.body.cancel(); // cancel 1-byte read
 
-          if (start >= size || end >= size) {
+          const parts = rangeHeader.replace(/bytes=/i, "").trim().split("-");
+          let start = parseInt(parts[0], 10);
+          let end = parts[1] ? parseInt(parts[1], 10) : size - 1;
+
+          if (isNaN(start)) {
+            start = size - end;
+            end = size - 1;
+          }
+
+          if (start < 0) start = 0;
+          if (end >= size) end = size - 1;
+
+          if (start > end || start >= size) {
             streamHeaders.set('Content-Range', `bytes */${size}`);
             return new Response("Requested Range Not Satisfiable", { status: 416, headers: streamHeaders });
           }
 
           const chunksize = (end - start) + 1;
-
-          // ── Fix for large audio files (FLAC/WAV) ──
-          // Cancel the first lazy stream to free up worker memory/handles 
-          // before triggering a second Range request.
-          file.body.cancel();
-
-          // Request specific byte range from R2
           const exactFile = await env.MUSIC_BUCKET.get(key, { range: { offset: start, length: chunksize } });
+          if (!exactFile) return new Response("File Not Found", { status: 404, headers: corsHeaders });
 
           streamHeaders.set('Content-Range', `bytes ${start}-${end}/${size}`);
           streamHeaders.set('Content-Length', chunksize);
 
           return new Response(exactFile.body, { status: 206, headers: streamHeaders });
         } else {
-          // No range requested, return full file
-          streamHeaders.set('Content-Length', size);
+          const file = await env.MUSIC_BUCKET.get(key);
+          if (!file) return new Response("File Not Found", { status: 404, headers: corsHeaders });
+          streamHeaders.set('Content-Length', file.size);
           return new Response(file.body, { status: 200, headers: streamHeaders });
         }
+      } catch (e) {
+        return new Response(e.message, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── 2.3 Serve cover from R2 ────────
+    if (url.pathname === '/api/cover') {
+      const key = url.searchParams.get('key');
+      if (!key) return new Response("Missing Key", { status: 400, headers: corsHeaders });
+      if (!env.MUSIC_BUCKET) return new Response("Bucket Binding Missing", { status: 500, headers: corsHeaders });
+
+      try {
+        const coverKey = `_covers/${key}`;
+        const coverFile = await env.MUSIC_BUCKET.get(coverKey);
+
+        if (!coverFile) return new Response("Cover Not Found", { status: 404, headers: corsHeaders });
+
+        const coverHeaders = new Headers(corsHeaders);
+        coverHeaders.set('Content-Type', 'image/jpeg'); // Standard fallback
+        coverHeaders.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+        return new Response(coverFile.body, { status: 200, headers: coverHeaders });
+      } catch (e) {
+        return new Response(e.message, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── 2.4 Database Schema Repair ────────
+    if (url.pathname === '/api/db/repair') {
+      if (!env.DB) return new Response("DB Binding Missing", { status: 500, headers: corsHeaders });
+      try {
+        try { await env.DB.prepare("ALTER TABLE tracks ADD COLUMN durationMs INTEGER").run(); } catch (e) { console.log(`[DB Repair] durationMs warning: ${e.message}`); }
+        try { await env.DB.prepare("ALTER TABLE tracks ADD COLUMN durationStr TEXT").run(); } catch (e) { console.log(`[DB Repair] durationStr warning: ${e.message}`); }
+        const response = Response.json({ success: true, message: "Database Repaired (Columns Added)" });
+        for (const [key, value] of Object.entries(corsHeaders)) {
+          response.headers.set(key, value);
+        }
+        return response;
+      } catch (e) {
+        return new Response(e.message, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── 2.5 Manual Scan Trigger ────────
+    if (url.pathname === '/api/scan') {
+      try {
+        const force = url.searchParams.get('force') === 'true';
+        await this.scheduled({ cron: force ? 'force_scan' : undefined }, env, {});
+        const response = Response.json({ success: true, message: `Scan Completed ${force ? '(Forced)' : ''}` });
+        for (const [key, value] of Object.entries(corsHeaders)) {
+          response.headers.set(key, value);
+        }
+        return response;
       } catch (e) {
         return new Response(e.message, { status: 500, headers: corsHeaders });
       }
@@ -228,8 +291,8 @@ export default {
 
         await env.DB.prepare(query).bind(...params).run();
 
-        return new Response(JSON.stringify({ success: true }), { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e) {
         return new Response(e.message, { status: 500, headers: corsHeaders });
@@ -263,7 +326,8 @@ export default {
       const validExtensions = ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'aac'];
       const audioObjects = allObjects.filter(obj => {
         const ext = obj.key.split('.').pop().toLowerCase();
-        return validExtensions.includes(ext);
+        const isInternal = obj.key.startsWith('_') || obj.key.includes('/_') || obj.key.startsWith('.') || obj.key.includes('/.');
+        return validExtensions.includes(ext) && !isInternal;
       });
 
       console.log(`Scanning ${audioObjects.length} files...`);
@@ -273,7 +337,9 @@ export default {
           // 2. Check if file key already exists, but re-scan if it's missing details
           const exists = await env.DB.prepare("SELECT id, artist, coverUrl FROM tracks WHERE id = ?").bind(item.key).first();
 
-          if (!exists || exists.artist === 'Unknown Artist' || !exists.coverUrl) {
+          // Force re-scan if `force_scan` is true, or if metadata is missing/generic
+          const forceScan = true; // Check for a custom event property
+          if (forceScan || !exists || exists.artist === 'Unknown Artist' || !exists.coverUrl || exists.coverUrl.includes('/api/cover') || exists.coverUrl.includes('yourworker.workers.dev')) {
             console.log(`Found new file to index: ${item.key}`);
 
             const filename = item.key.split('/').pop();
@@ -325,7 +391,7 @@ export default {
                         if (comment.toUpperCase().startsWith('ARTIST=')) artist = comment.split('=')[1].trim();
                         if (comment.toUpperCase().startsWith('TITLE=')) title = comment.split('=')[1].trim();
                       }
-                    } 
+                    }
                     else if (blockType === 6) { // PICTURE
                       try {
                         let picBuffer = buffer;
@@ -342,15 +408,30 @@ export default {
                         }
 
                         let picOffset = currOffset + 4; // Skip Type
-                        const mimeLen = picView.getUint32(picOffset); picOffset += 4 + mimeLen;
-                        const descLen = picView.getUint32(picOffset); picOffset += 4 + descLen + 16; // skip desc, width
+                        const mimeLen = picView.getUint32(picOffset); picOffset += 4;
+                        let mimeType = '';
+                        for (let i = 0; i < mimeLen; i++) {
+                          mimeType += String.fromCharCode(picView.getUint8(picOffset + i));
+                        }
+                        if (!mimeType) mimeType = 'image/jpeg';
+                        if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+
+                        picOffset += mimeLen;
+
+                        const descLen = picView.getUint32(picOffset); picOffset += 4 + descLen + 16; // skip desc, width, height, depth, colors
                         const dataLen = picView.getUint32(picOffset); picOffset += 4;
 
                         if (picOffset + dataLen <= picBuffer.byteLength) {
                           const picBytes = new Uint8Array(picBuffer, picOffset, dataLen);
-                          let binary = '';
-                          for (let i = 0; i < dataLen; i++) binary += String.fromCharCode(picBytes[i]);
-                          coverUrl = `data:image/jpeg;base64,${btoa(binary)}`;
+                          try {
+                            const coverKey = `_covers/${item.key}`;
+                            await env.MUSIC_BUCKET.put(coverKey, picBytes, {
+                              httpMetadata: { contentType: mimeType || 'image/jpeg' }
+                            });
+                            coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
+                          } catch (picErr) {
+                            console.error("FLAC Cover R2 Save Failed:", picErr);
+                          }
                         }
                       } catch (e) {
                         console.error("Picture extraction failed:", e);
@@ -363,25 +444,25 @@ export default {
                   try {
                     const majorVersion = view.getUint8(3);
                     let offset = 10; // Skip 10-byte ID3v2 header
-                    
+
                     const tagSize = ((view.getUint8(6) & 0x7F) << 21) |
-                                    ((view.getUint8(7) & 0x7F) << 14) |
-                                    ((view.getUint8(8) & 0x7F) << 7)  |
-                                    (view.getUint8(9) & 0x7F);
+                      ((view.getUint8(7) & 0x7F) << 14) |
+                      ((view.getUint8(8) & 0x7F) << 7) |
+                      (view.getUint8(9) & 0x7F);
 
                     while (offset < tagSize + 10 && offset < buffer.byteLength - 10) {
-                      const frameID = String.fromCharCode(view.getUint8(offset), view.getUint8(offset+1), view.getUint8(offset+2), view.getUint8(offset+3));
-                      
+                      const frameID = String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+
                       let frameSize = 0;
                       if (majorVersion === 4) { // Synchsafe size in v2.4
                         frameSize = ((view.getUint8(offset + 4) & 0x7F) << 21) |
-                                    ((view.getUint8(offset + 5) & 0x7F) << 14) |
-                                    ((view.getUint8(offset + 6) & 0x7F) << 7)  |
-                                    (view.getUint8(offset + 7) & 0x7F);
+                          ((view.getUint8(offset + 5) & 0x7F) << 14) |
+                          ((view.getUint8(offset + 6) & 0x7F) << 7) |
+                          (view.getUint8(offset + 7) & 0x7F);
                       } else { // Standard 32-bit integer in v2.3
                         frameSize = view.getUint32(offset + 4);
                       }
-                      
+
                       offset += 10; // Skip 10-byte frame header
 
                       if (offset + frameSize > buffer.byteLength) break;
@@ -403,7 +484,7 @@ export default {
                           return new TextDecoder('iso-8859-1').decode(bytes).replace(/\0/g, '').trim();
                         } else if (enc === 2) { // UTF-16BE
                           try { return new TextDecoder('utf-16be').decode(bytes).replace(/\0/g, '').trim(); }
-                          catch(e) { return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim(); }
+                          catch (e) { return new TextDecoder('utf-16').decode(bytes).replace(/\0/g, '').trim(); }
                         }
                         return new TextDecoder('utf-8').decode(bytes).replace(/\0/g, '').trim();
                       };
@@ -415,23 +496,50 @@ export default {
                         const raw = decodeID3(frameData);
                         if (raw) artist = raw;
                       } else if (frameID === 'APIC') {
+                        const textEncoding = frameData[0];
                         let picOffset = 1; // Skip encoding
-                        while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++; picOffset++; // Skip MIME
+
+                        let mimeStart = picOffset;
+                        while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
+                        let mimeType = '';
+                        for (let i = mimeStart; i < picOffset; i++) {
+                          mimeType += String.fromCharCode(frameData[i]);
+                        }
+                        if (!mimeType) mimeType = 'image/jpeg';
+                        if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+                        if (mimeType === '-->') mimeType = 'image/jpeg';
+
+                        picOffset++; // Skip null terminator
                         picOffset++; // Skip picture type
-                        while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++; picOffset++; // Skip description
-                        
+
+                        if (textEncoding === 1 || textEncoding === 2) {
+                          while (picOffset < frameData.length - 1 && (frameData[picOffset] !== 0 || frameData[picOffset + 1] !== 0)) {
+                            picOffset++;
+                          }
+                          picOffset += 2; // Skip double null
+                        } else {
+                          while (frameData[picOffset] !== 0 && picOffset < frameData.length) picOffset++;
+                          picOffset++; // Skip single null
+                        }
+
                         if (picOffset < frameData.length) {
                           const picBytes = frameData.subarray(picOffset);
-                          let binary = '';
-                          for (let i = 0; i < picBytes.length; i++) binary += String.fromCharCode(picBytes[i]);
-                          coverUrl = `data:image/jpeg;base64,${btoa(binary)}`;
+                          try {
+                            const coverKey = `_covers/${item.key}`;
+                            await env.MUSIC_BUCKET.put(coverKey, picBytes, {
+                              httpMetadata: { contentType: mimeType || 'image/jpeg' }
+                            });
+                            coverUrl = `/api/cover?key=${encodeURIComponent(item.key)}`;
+                          } catch (picErr) {
+                            console.error("MP3 Cover R2 Save Failed:", picErr);
+                          }
                         }
                       }
 
                       offset += frameSize;
                     }
                   } catch (e) {
-                      console.error("ID3 Parse Error:", e);
+                    console.error("ID3 Parse Error:", e);
                   }
                 }
               }

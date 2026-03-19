@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import logo from '../assets/logo.png';
-import { FaHome, FaMusic, FaMicrophone, FaListUl, FaPlus, FaTrash, FaSignOutAlt, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaHome, FaMusic, FaMicrophone, FaListUl, FaPlus, FaTrash, FaSignOutAlt, FaChevronDown, FaChevronRight, FaTimes } from 'react-icons/fa';
 import { BiSearchAlt } from 'react-icons/bi';
 import { useApp } from '../context/AppContext';
 import { usePlaylists } from '../context/PlaylistContext';
 import './Sidebar.css';
 
 const Sidebar = () => {
-  const { activeView, navigate, allTracks } = useApp();
+  const { activeView, navigate, allTracks, mobileNavOpen, setMobileNavOpen } = useApp();
   const { playlists, createPlaylist, deletePlaylist } = usePlaylists();
 
   const user = { name: 'Mohamed Azarudeen F', email: 'Cloudflare' };
@@ -32,11 +32,14 @@ const Sidebar = () => {
   ];
 
   return (
-    <nav className="sidebar">
+    <nav className={`sidebar ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       {/* Logo */}
       <div className="sidebar-logo">
         <img src={logo} alt="Cloud Music" className="sidebar-logo-img" />
         <span>Cloud Music</span>
+        <button className="sidebar-close-btn" onClick={() => setMobileNavOpen(false)} title="Close menu">
+          <FaTimes />
+        </button>
       </div>
 
       {/* Search */}
@@ -52,7 +55,7 @@ const Sidebar = () => {
             <li
               key={item.view}
               className={`nav-item ${activeView === item.view ? 'active' : ''}`}
-              onClick={() => navigate(item.view, null, true)}
+              onClick={() => { navigate(item.view, null, true); setMobileNavOpen(false); }}
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
@@ -95,7 +98,7 @@ const Sidebar = () => {
               <li
                 key={pl.id}
                 className={`nav-item pl-item ${activeView === 'playlist-detail' ? 'active' : ''}`}
-                onClick={() => navigate('playlist-detail', pl.id)}
+                onClick={() => { navigate('playlist-detail', pl.id); setMobileNavOpen(false); }}
               >
                 <span className="nav-icon"><FaListUl /></span>
                 <span className="nav-label ellipsis">{pl.name}</span>

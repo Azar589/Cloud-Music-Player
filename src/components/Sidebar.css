@@ -313,3 +313,39 @@
 .sidebar-logout:hover {
   color: var(--accent-primary);
 }
+
+/* ── Sidebar Close Button ── */
+.sidebar-close-btn {
+  display: none; /* Hidden on Desktop */
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 999; /* Float above MainView */
+    background: rgba(15, 15, 20, 0.95);
+    backdrop-filter: blur(50px);
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar.mobile-nav-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+  }
+}

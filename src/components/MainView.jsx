@@ -3,16 +3,17 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { usePlaylists } from '../context/PlaylistContext';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
-import { FaPlay, FaPause, FaFolder, FaMusic, FaMicrophone, FaTrash, FaChevronLeft } from 'react-icons/fa';
+import { FaPlay, FaPause, FaFolder, FaMusic, FaMicrophone, FaTrash, FaChevronLeft, FaBars, FaEllipsisV } from 'react-icons/fa';
 import Player from './Player';
 import NowPlayingPanel from './NowPlayingPanel';
 import logo from '../assets/logo.png';
+import { MdPlaylistAdd } from 'react-icons/md';
 import './MainView.css';
 
 const HERO_BG = 'https://images.unsplash.com/photo-1493225457124-a3a2fcf0c374?w=800&q=80';
 
 const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
-  const { playTrack, togglePlay, currentTrack, isPlaying, setQueue } = useAudioPlayer();
+  const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
   const { removeFromPlaylist } = usePlaylists();
   const [hoveredRow, setHoveredRow] = useState(null);
 
@@ -28,6 +29,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
             <th>QUALITY</th>
             <th>ARTIST</th>
             <th style={{ textAlign: 'right' }}>TIME</th>
+            <th style={{ width: 40, textAlign: 'center' }}><MdPlaylistAdd size={16} /></th>
             {playlistId && <th style={{ width: 40 }}></th>}
           </tr>
         </thead>
@@ -67,7 +69,10 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
                   ) : (
                     <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'cover', opacity: 0.8 }} />
                   )}
-                  <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
+                  <div className="title-text-group">
+                    <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
+                    <span className="track-artist-sub">{track.artist || 'Unknown Artist'}</span>
+                  </div>
                 </div>
               </td>
               <td className="td-quality">
@@ -80,6 +85,10 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
               </td>
               <td className="td-artist ellipsis">{track.artist || 'Unknown Artist'}</td>
               <td className="td-time" style={{ textAlign: 'right' }}>{track.duration !== 'Unknown' ? track.duration : '--:--'}</td>
+              <td className="td-add-queue" onClick={(e) => { e.stopPropagation(); addToQueue(track); }} title="Add to Queue">
+                <MdPlaylistAdd size={18} />
+              </td>
+              <td className="td-item-more-mob"><FaEllipsisV /></td>
               {playlistId && (
                 <td className="td-action">
                   <button
@@ -104,7 +113,7 @@ const MainView = () => {
   const {
     isLoading, loadError, allTracks, folders, artistMap,
     activeView, viewParam, navigate, goBack, canGoBack,
-    showNowPlaying, setShowNowPlaying
+    showNowPlaying, setShowNowPlaying, setMobileNavOpen
   } = useApp();
   const { playlists } = usePlaylists();
   const [recentCardSize, setRecentCardSize] = useState(160);
@@ -230,6 +239,11 @@ const MainView = () => {
       )}
 
       <div className="mv-topbar">
+        <button className="mobile-menu-btn" onClick={() => setMobileNavOpen(true)} title="Menu">
+          <FaBars />
+        </button>
+        <span className="mobile-logo-text">Cloud Music Player</span>
+
         {canGoBack && (
           <button className="nav-arrow-btn" onClick={goBack} title="Go back">
             <FaChevronLeft />

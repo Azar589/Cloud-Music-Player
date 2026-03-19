@@ -3,9 +3,9 @@
 .app-container {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
-  grid-template-rows: 100vh;
+  grid-template-rows: 100dvh;
   grid-template-areas: "sidebar main";
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
@@ -13,4 +13,11 @@
 .app-container.np-expanded {
   grid-template-columns: 1fr;
   grid-template-areas: "main";
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main";
+  }
 }

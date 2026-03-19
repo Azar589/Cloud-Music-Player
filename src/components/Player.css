@@ -648,3 +648,53 @@
   background: rgba(157, 78, 221, 0.12);
   border-left: 3px solid #8b3dff;
 }
+
+@media (max-width: 768px) {
+  .player-inner {
+    padding: 10px 16px;
+    height: 70px;
+  }
+
+  /* Hide center seekbar range on small mini player bar */
+  .player-seekbar-row {
+    display: none;
+  }
+
+  /* Compact left cover/title */
+  .now-playing-cover {
+    width: 44px;
+    height: 44px;
+  }
+
+  .now-playing-title {
+    font-size: 0.88rem;
+    max-width: 140px;
+  }
+
+  /* Hide right controls (Volume etc) to make space */
+  .player-right {
+    display: none;
+  }
+
+  /* Keep just the play and next button in center */
+  .player-controls {
+    gap: 12px;
+  }
+
+  .p-ctrl-btn {
+    display: none; /* Shuffle/Repeat hide */
+  }
+  
+  .player-center {
+    flex: 0; /* Shrink center wrapper so left can grow */
+  }
+}
+
+@media (max-width: 420px) {
+  .now-playing-title {
+    max-width: 110px;
+  }
+  .now-playing-artist {
+    max-width: 110px;
+  }
+}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { fetchR2Library } from '../services/R2Service';
+import { fetchR2Library, WORKER_URL } from '../services/R2Service';
 
 const AppContext = createContext();
 export const useApp = () => useContext(AppContext);
@@ -13,6 +13,13 @@ export const AppProvider = ({ children }) => {
 
   // Layout states
   const [showNowPlaying, setShowNowPlaying] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode') || 'vinyl');
+
+  const updateViewMode = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('viewMode', mode);
+  };
 
   // ── Navigation state ──────────────────────────────────
   const [activeView, setActiveView] = useState('home');
@@ -104,7 +111,7 @@ export const AppProvider = ({ children }) => {
         if (!cancelled) {
           // 1. Update D1 Index back-end so future views load immediately
           try {
-            await fetch('/api/tracks/update', {
+            await fetch(`${WORKER_URL}/tracks/update`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: track.id, ...updates })
@@ -136,21 +143,6 @@ export const AppProvider = ({ children }) => {
               if (t.artist) updates.artist = t.artist;
               if (t.title) updates.title = t.title;
               
-              if (t.picture) {
-                try {
-                  const pic = t.picture;
-                  const bytes = new Uint8Array(pic.data);
-                  let binary = '';
-                  for (let i = 0; i < bytes.byteLength; i++) {
-                    binary += String.fromCharCode(bytes[i]);
-                  }
-                  const base64 = window.btoa(binary);
-                  
-                  // Permanent Base64 Data URI (Saves cleanly into D1)
-                  const format = pic.format === 'image/jpeg' || pic.format === 'jpeg' ? 'image/jpeg' : 'image/png';
-                  updates.coverUrl = `data:${format};base64,${base64}`;
-                } catch (e) { }
-              }
               finishAndNext(updates);
             },
             onError: () => finishAndNext(updates)
@@ -209,7 +201,11 @@ export const AppProvider = ({ children }) => {
       allTracks, folders, artistMap, isLoading, loadError,
       activeView, viewParam, navigate, goBack, canGoBack: navHistory.length > 1,
       showNowPlaying,
-      setShowNowPlaying
+      setShowNowPlaying,
+      mobileNavOpen,
+      setMobileNavOpen,
+      viewMode,
+      setViewMode: updateViewMode
     }}>
       {children}
     </AppContext.Provider>

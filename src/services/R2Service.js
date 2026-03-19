@@ -4,7 +4,7 @@ import axios from 'axios';
 // 1. Deploy the worker_template.js code onto a Cloudflare Worker Dashboard.
 // 2. Insert your workers domain endpoint here below!
 // ────────────────────────────────────────────────────────────────────────────
-const WORKER_URL = 'https://drive-music-player.mohammedazar4458730.workers.dev/api';
+export const WORKER_URL = 'https://drive-music-player.mohammedazar4458730.workers.dev/api';
 
 const MOCK_TRACKS = [
   { id: '1', title: 'Midnight City', artist: 'M83', format: 'MP3', duration: '4:03', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', coverUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&q=80', folderId: 'root', folderName: 'R2 Bucket' },

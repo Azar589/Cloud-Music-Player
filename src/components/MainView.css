@@ -2,18 +2,19 @@
   grid-area: main;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: transparent;
   z-index: 1;
-  position: relative; /* Contains the absolute np-overlay */
+  position: relative;
+  /* Contains the absolute np-overlay */
 }
 
 /* ── Top bar ── */
 .mv-topbar {
   display: flex;
   align-items: center;
-  padding: 16px 24px 8px;
+  padding: 16px 20px 8px;
   flex-shrink: 0;
 }
 
@@ -356,6 +357,8 @@
 .track-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+  /* Force rigid column dimension specs */
 }
 
 .track-table-hdr th {
@@ -367,6 +370,39 @@
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+.track-table-hdr th:nth-child(1) {
+  width: 50px;
+}
+
+/* # */
+.track-table-hdr th:nth-child(2) {
+  width: 40%;
+}
+
+/* SONG */
+.track-table-hdr th:nth-child(3) {
+  width: 160px;
+}
+
+/* QUALITY */
+.track-table-hdr th:nth-child(4) {
+  width: 35%;
+}
+
+/* ARTIST */
+.track-table-hdr th:nth-child(5) {
+  width: 60px;
+  text-align: right;
+}
+
+/* TIME */
+.track-table-hdr th:nth-child(6) {
+  width: 40px;
+  text-align: center;
+}
+
+/* ADD TO QUEUE */
 
 .track-row {
   cursor: pointer;
@@ -387,10 +423,25 @@
   font-size: 0.875rem;
   vertical-align: middle;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.td-add-queue {
+  width: 40px;
+  text-align: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.td-add-queue:hover {
+  color: var(--text-primary);
 }
 
 .td-num {
-  width: 55px;
+  width: 50px;
   color: var(--text-tertiary);
   font-size: 0.8rem;
 }
@@ -403,25 +454,27 @@
 }
 
 .td-title {
-  min-width: 0;
+  width: 45%;
+  /* Elastic proportion width */
 }
 
 .td-quality {
-  max-width: 200px;
+  width: 110px;
 }
 
 .td-artist {
-  max-width: 360px;
-  /* Reduces column width; works with .ellipsis */
+  width: 35%;
+  /* Elastic proportion width */
 }
 
 .td-time {
   width: 50px;
   color: var(--text-tertiary);
+  text-align: right;
 }
 
 .td-album {
-  max-width: 140px;
+  width: 140px;
   color: var(--text-tertiary);
 }
 
@@ -469,6 +522,11 @@
   font-weight: 500;
   color: var(--text-secondary);
   max-width: 220px;
+}
+
+.track-artist-sub {
+  display: none;
+  /* Hidden on Desktop column spreadsheet */
 }
 
 .text-active {
@@ -544,4 +602,193 @@
   50% {
     transform: scaleY(1);
   }
+}
+
+/* ── Burger Button for Topbar ── */
+.mobile-menu-btn {
+  display: none;
+  /* Hide Desktop */
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 10px;
+  margin-right: 4px;
+}
+
+.mobile-logo-text {
+  display: none;
+  /* Hide Desktop */
+  font-weight: 800;
+  font-size: 1rem;
+  color: #ffffff;
+  letter-spacing: -0.1px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .mobile-logo-text {
+    display: flex;
+  }
+
+  .mv-topbar {
+    padding: 18px 16px;
+    /* Tighter padding */
+  }
+
+  /* Hide quality and time columns on very narrow grids */
+  .track-table-hdr th:nth-child(3),
+  .track-table-hdr th:nth-child(5) {
+    display: none;
+  }
+
+  .track-row td:nth-child(3),
+  .track-row td:nth-child(5) {
+    display: none;
+  }
+
+  .folder-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  /* ── Hide Back Button on Mobile ── */
+  .nav-arrow-btn {
+    display: none !important;
+  }
+
+  /* ── Mobile Flex List view for TrackTable ── */
+  .track-table {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    /* Slight cell gap */
+    width: 100%;
+  }
+
+  .track-table thead {
+    display: none !important;
+    /* Hide Header from reference view */
+  }
+
+  .track-table tbody {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 2px;
+  }
+
+  .track-row {
+    display: flex;
+    align-items: center;
+    padding: 5px 5px;
+    border-bottom: none;
+    /* Removed list borders from reference */
+    width: 100%;
+    cursor: pointer;
+    box-sizing: border-box;
+    gap: 2px;
+  }
+
+  .td-num {
+    display: none !important;
+    /* Hide numbering from reference */
+  }
+
+  .td-artist {
+    display: none !important;
+    /* Hide duplicating desktop column on mobile */
+  }
+
+  .td-add-queue {
+    display: none !important;
+    /* Hide column action trigger on mobile reference list design */
+  }
+
+  .td-title {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .title-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .track-cover-mini {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 8px !important;
+    object-fit: cover !important;
+    flex-shrink: 0 !important;
+    align-items: left;
+  }
+
+  .title-text-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Restored elastic to prevent horizontal breakage */
+    gap: 2px;
+    flex: 1;
+  }
+
+  .track-title-text {
+    font-size: 0.98rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block !important;
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .track-artist-sub {
+    display: block !important;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6) !important;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    width: 100%;
+  }
+
+  .td-quality {
+    display: none !important;
+    /* Hide Quality to match reference */
+  }
+
+  .td-time {
+    display: none !important;
+  }
+
+  .td-item-more-mob {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
+    margin-left: auto;
+    padding-left: 10px;
+  }
+}
+
+/* ── Desktop hiding rules for mobile cells ── */
+.td-item-more-mob {
+  display: none;
 }

@@ -52,16 +52,46 @@
   display: none;
 }
 
-.np-close {
+.npp-top-header {
   position: absolute;
-  top: 24px;
-  right: 24px;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+}
+
+.npp-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.npp-header-logo {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.npp-header-text {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.np-close {
   background: rgba(255, 255, 255, 0.08);
   border: none;
   color: rgba(255, 255, 255, 0.7);
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -546,7 +576,7 @@
 /* ── Secondary Controls (Volume, Queue, Menu) ── */
 .np-secondary-controls {
   position: absolute;
-  bottom: 32px;
+  bottom: 30px;
   left: 32px;
   right: 32px;
   display: flex;
@@ -559,14 +589,19 @@
 .np-volume-section {
   display: flex;
   align-items: center;
-  gap: 10px;
-
+  gap: 8px;
 }
 
 .np-vol-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary);
   font-size: 1.1rem;
   transition: color 0.2s;
+  background: transparent;
+  padding: 0;
+  border: none;
 }
 
 .np-vol-btn:hover {
@@ -579,7 +614,6 @@
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding-bottom: 4px;
 }
 
 .np-vol-bg {
@@ -644,11 +678,200 @@
 }
 
 .np-tool-btn:hover {
-  color: #fff;
+  color: #ffffff;
   transform: scale(1.1);
 }
 
 .np-tool-btn:hover {
   color: var(--text-primary);
   transform: scale(1.1);
+}
+
+/* ── Squircle Cover Art ── */
+.np-squircle-cover-wrapper {
+  margin-top: 32px;
+  width: 260px;
+  height: 260px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: scale-up 0.3s ease-out;
+}
+
+.np-squircle-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes scale-up {
+  from {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── More Options Popup ── */
+.more-popup {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  width: 160px;
+  background: rgba(22, 22, 26, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(68, 64, 64, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  z-index: 200;
+  animation: more-slide-up 0.2s ease-out;
+}
+
+@keyframes more-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.more-popup-title {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 4px;
+}
+
+.more-item {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.more-item:hover {
+  background: rgba(139, 61, 255, 0.15);
+  color: #fff;
+}
+
+.more-item.item-active {
+  color: #8b3dff;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+
+  /* Common Bottom Sheet rules */
+  .queue-popup,
+  .sleep-popup,
+  .more-popup {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    background: rgba(18, 18, 22, 0.98) !important;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 24px 24px 0 0 !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8) !important;
+    z-index: 9999 !important;
+    margin: 0 !important;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateY(100%);
+    animation: sheet-slide-up 0.35s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+
+  @keyframes sheet-slide-up {
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  /* Specific Heights */
+  .queue-popup {
+    height: 75vh !important;
+  }
+
+  .sleep-popup,
+  .more-popup {
+    height: auto !important;
+    max-height: 50vh !important;
+    padding: 10px 0 20px 0 !important;
+  }
+
+  /* Drag Handle bar */
+  .bottom-sheet-drag-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    margin: 6px auto 12px auto;
+    flex-shrink: 0;
+  }
+
+  /* Adjust inner header spacing */
+  .queue-popup-hdr,
+  .sleep-popup-title,
+  .more-popup-title {
+    text-align: center;
+    border-bottom: none !important;
+    font-size: 1rem !important;
+    font-weight: 800 !important;
+    color: #fff !important;
+    text-transform: none !important;
+    margin-bottom: 12px !important;
+    padding: 0 !important;
+  }
+
+  .queue-popup-list {
+    flex: 1;
+    overflow-y: auto !important;
+    padding: 0 16px !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Items spacing tweaks on sheet */
+  .queue-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    padding: 14px 8px !important;
+  }
+
+  .more-item,
+  .sleep-item {
+    padding: 14px 24px !important;
+    font-size: 0.95rem !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
 }

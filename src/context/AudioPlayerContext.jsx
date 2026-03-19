@@ -5,7 +5,12 @@ const AudioPlayerContext = createContext();
 export const useAudioPlayer = () => useContext(AudioPlayerContext);
 
 export const AudioPlayerProvider = ({ children }) => {
-  const audioRef = useRef(new Audio());
+  const audioRef = useRef(null);
+  if (audioRef.current === null) {
+    const a = new Audio();
+    a.crossOrigin = 'anonymous';
+    audioRef.current = a;
+  }
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [volume, setVolume] = useState(() => {
@@ -193,7 +198,9 @@ export const AudioPlayerProvider = ({ children }) => {
 
     setRecentlyPlayed(prev => {
       const filtered = prev.filter(t => t.id !== track.id);
-      return [track, ...filtered].slice(0, 6);
+      const { coverUrl, ...minimized } = track;
+      const toSave = coverUrl && coverUrl.startsWith('data:') ? minimized : track;
+      return [toSave, ...filtered].slice(0, 6);
     });
 
     const cachedUrl = preloadCacheRef.current[track.id];
@@ -263,12 +270,21 @@ export const AudioPlayerProvider = ({ children }) => {
         }
       })
       .catch(e => {
+        if (e.name === 'AbortError') return; // Ignore play/pause interruptions
         if (activeLoadIdRef.current === track.id) console.error('Playback failed:', e);
       });
   };
 
   const playTrack = async (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
+    
+    // ── Unlock Audio for Mobile Browsers ──
+    // Triggering synchronous play prevents async fetch hops from breaking user interaction flags.
+    try {
+      audioRef.current.src = 'about:blank'; 
+      audioRef.current.play().catch(() => {});
+    } catch (e) {}
+
     await _loadAndPlay(track);
   };
 
@@ -328,6 +344,11 @@ export const AudioPlayerProvider = ({ children }) => {
       return next;
     });
   };
+  const addToQueue = (track) => {
+    setQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
+    setOriginalQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
+  };
+
   const toggleRepeat  = () => setIsRepeating(prev => !prev);
 
   const updateVolume = (newVolume) => {
@@ -360,7 +381,7 @@ export const AudioPlayerProvider = ({ children }) => {
       isShuffled, isRepeating, queue, recentlyPlayed,
       sleepTimeLeft, startSleepTimer, clearSleepTimer,
       playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
-      updateVolume, toggleMute, seek, setQueue: setQueueList,
+      updateVolume, toggleMute, seek, setQueue: setQueueList, addToQueue,
     }}>
       {children}
     </AudioPlayerContext.Provider>
