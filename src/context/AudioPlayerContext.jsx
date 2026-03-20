@@ -50,6 +50,7 @@ export const AudioPlayerProvider = ({ children }) => {
   const activeLoadIdRef = useRef(null);
   const nextTrackRef = useRef(null);
   const fadeIntervalRef = useRef(null);
+  const isFadingInRef = useRef(false);
   const preloadCacheRef = useRef({});
   const sleepIntervalRef = useRef(null);
 
@@ -123,11 +124,11 @@ export const AudioPlayerProvider = ({ children }) => {
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
       setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
-      // Fade out 2 s before end
-      if (audio.duration && (audio.duration - audio.currentTime) <= 2) {
+      // Fade out 5 s before end
+      if (audio.duration && (audio.duration - audio.currentTime) <= 5) {
         const remaining = audio.duration - audio.currentTime;
-        audio.volume = Math.max(0, volumeRef.current * (remaining / 2));
-      } else if (!fadeIntervalRef.current && audio.volume !== volumeRef.current) {
+        audio.volume = Math.max(0, volumeRef.current * (remaining / 5));
+      } else if (!fadeIntervalRef.current && !isFadingInRef.current && audio.volume !== volumeRef.current) {
         audio.volume = volumeRef.current;
       }
     };
@@ -225,6 +226,7 @@ export const AudioPlayerProvider = ({ children }) => {
     audioRef.current.pause();
     clearInterval(fadeIntervalRef.current);
     fadeIntervalRef.current = null;
+    isFadingInRef.current = false;
 
     setRecentlyPlayed(prev => {
       const filtered = prev.filter(t => t.id !== track.id);
@@ -283,6 +285,7 @@ export const AudioPlayerProvider = ({ children }) => {
 
     if (activeLoadIdRef.current !== track.id) return;
 
+    isFadingInRef.current = true;
     audioRef.current.load();
     audioRef.current.volume = 0; // start silent, then fade in
     audioRef.current.play()
@@ -293,21 +296,23 @@ export const AudioPlayerProvider = ({ children }) => {
         const idx = q.findIndex(t => t.id === track.id);
         if (idx !== -1) preloadNextTrack(idx);
 
-        // 2 s fade in
+        // 5 s fade in
         clearInterval(fadeIntervalRef.current);
         let elapsed = 0;
         fadeIntervalRef.current = setInterval(() => {
           elapsed += 100;
-          if (elapsed >= 2000) {
+          if (elapsed >= 5000) {
             audioRef.current.volume = volumeRef.current;
+            isFadingInRef.current = false;
             clearInterval(fadeIntervalRef.current);
             fadeIntervalRef.current = null;
           } else {
-            audioRef.current.volume = volumeRef.current * (elapsed / 2000);
+            audioRef.current.volume = volumeRef.current * (elapsed / 5000);
           }
         }, 100);
       })
       .catch(e => {
+        isFadingInRef.current = false;
         if (e.name === 'AbortError') return;
         if (activeLoadIdRef.current === track.id) console.error('Playback failed:', e);
       });
