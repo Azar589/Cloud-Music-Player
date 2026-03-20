@@ -1,36 +1,38 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { fetchR2Library, WORKER_URL } from '../services/R2Service';
 
 const AppContext = createContext();
 export const useApp = () => useContext(AppContext);
 
 export const AppProvider = ({ children }) => {
-  // ── Library state ──────────────────────────────────────
+  // ── Library state ──────────────────────────────────────────────────────
   const [allTracks, setAllTracks] = useState([]);
   const [folders, setFolders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
-  // Layout states
+  // ── UI state ───────────────────────────────────────────────────────────
   const [showNowPlaying, setShowNowPlaying] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode') || 'vinyl');
+  const [viewMode, setViewModeState] = useState(() => localStorage.getItem('viewMode') || 'vinyl');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const updateViewMode = (mode) => {
-    setViewMode(mode);
+  const setViewMode = (mode) => {
+    setViewModeState(mode);
     localStorage.setItem('viewMode', mode);
   };
 
-  // ── Navigation state ──────────────────────────────────
+  // ── Navigation state ───────────────────────────────────────────────────
   const [activeView, setActiveView] = useState('home');
   const [viewParam, setViewParam] = useState(null);
   const [navHistory, setNavHistory] = useState([{ view: 'home', param: null }]);
 
-  // ── Load R2 library once on mount ──────────────────
+  // ── Load R2 library once ───────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       try {
-        setIsLoading(true); setLoadError(null);
+        setIsLoading(true);
+        setLoadError(null);
         const { tracks, folders } = await fetchR2Library();
 
         let cachedDurations = {};
@@ -38,28 +40,23 @@ export const AppProvider = ({ children }) => {
         try {
           cachedDurations = JSON.parse(localStorage.getItem('drivemusic_durations') || '{}');
           cachedMeta = JSON.parse(localStorage.getItem('drivemusic_metadata') || '{}');
-        } catch (e) { }
+        } catch { /* ignore */ }
 
         const hydratedTracks = (tracks || []).map(t => {
           let updated = { ...t };
-
           const durationMs = cachedDurations[t.id];
           if (durationMs) {
-            const durationSec = Math.floor(durationMs / 1000);
-            const durationStr = `${Math.floor(durationSec / 60)}:${String(durationSec % 60).padStart(2, '0')}`;
-            updated.duration = durationStr;
+            const sec = Math.floor(durationMs / 1000);
+            updated.duration = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
             updated.durationMs = durationMs;
           }
-
-          if (cachedMeta[t.id]) {
-            updated = { ...updated, ...cachedMeta[t.id], _metadataProbed: true };
-          }
+          if (cachedMeta[t.id]) updated = { ...updated, ...cachedMeta[t.id], _metadataProbed: true };
           return updated;
         });
 
         setAllTracks(hydratedTracks);
         setFolders(folders || []);
-      } catch (err) {
+      } catch {
         setLoadError('Could not load your R2 library. Check your worker connection.');
       } finally {
         setIsLoading(false);
@@ -68,26 +65,29 @@ export const AppProvider = ({ children }) => {
     load();
   }, []);
 
-  // ── Listen for late duration updates (e.g. from playing) ──
+  // ── Listen for late duration updates ──────────────────────────────────
   useEffect(() => {
-    const handleUpdate = (e) => {
+    const handle = (e) => {
       const { id, durationMs } = e.detail;
-      const durationSec = Math.floor(durationMs / 1000);
-      const durationStr = `${Math.floor(durationSec / 60)}:${String(durationSec % 60).padStart(2, '0')}`;
-
-      setAllTracks(prev => prev.map(t =>
-        t.id === id ? { ...t, duration: durationStr, durationMs } : t
-      ));
+      const sec = Math.floor(durationMs / 1000);
+      const durationStr = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+      setAllTracks(prev => prev.map(t => t.id === id ? { ...t, duration: durationStr, durationMs } : t));
     };
-
-    window.addEventListener('trackDurationUpdated', handleUpdate);
-    return () => window.removeEventListener('trackDurationUpdated', handleUpdate);
+    window.addEventListener('trackDurationUpdated', handle);
+    return () => window.removeEventListener('trackDurationUpdated', handle);
   }, []);
 
-  // ── Background metadata discovery (Safe Sequential) ──────────────────
-  // sequential throttled, no memory leak, updates D1 database for future visitors for free.
+  // FIX: use useMemo for stable dep instead of inline .filter().length expression
+  const unprobedCount = useMemo(
+    () => allTracks.filter(t =>
+      (!t.durationMs || t.artist === 'Unknown Artist' || t.coverUrl?.includes('images.unsplash.com')) && t.url
+    ).length,
+    [allTracks]
+  );
+
+  // ── Background metadata discovery (sequential, throttled) ─────────────
   useEffect(() => {
-    const tracksNeedingProbe = allTracks.filter(t => 
+    const tracksNeedingProbe = allTracks.filter(t =>
       (!t.durationMs || t.artist === 'Unknown Artist' || t.coverUrl?.includes('images.unsplash.com')) && t.url
     );
     if (tracksNeedingProbe.length === 0) return;
@@ -108,33 +108,27 @@ export const AppProvider = ({ children }) => {
       const track = tracksNeedingProbe[idx];
 
       const finishAndNext = async (updates) => {
-        if (!cancelled) {
-          // 1. Update D1 Index back-end so future views load immediately
-          try {
-            await fetch(`${WORKER_URL}/tracks/update`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: track.id, ...updates })
-            });
-          } catch (e) { }
+        if (cancelled) return;
+        try {
+          await fetch(`${WORKER_URL}/tracks/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: track.id, ...updates }),
+          });
+        } catch { /* non-critical */ }
 
-          // 2. Update local app state
-          setAllTracks(prev => prev.map(t => t.id === track.id ? { ...t, ...updates } : t));
-
-          idx++;
-          setTimeout(safeProbe, 1500); // 1.5s delay throttled sequentially
-        }
+        setAllTracks(prev => prev.map(t => t.id === track.id ? { ...t, ...updates } : t));
+        idx++;
+        setTimeout(safeProbe, 1500);
       };
 
       audio.onloadedmetadata = () => {
         const d = audio.duration;
-        let updates = {};
+        const updates = {};
         if (d && isFinite(d)) {
-          const durationMs = Math.round(d * 1000);
-          updates.durationMs = durationMs;
+          updates.durationMs = Math.round(d * 1000);
           updates.duration = getDurationStr(d);
         }
-
         const jsmediatags = window.jsmediatags;
         if (jsmediatags) {
           jsmediatags.read(track.url, {
@@ -142,17 +136,16 @@ export const AppProvider = ({ children }) => {
               const t = tag.tags;
               if (t.artist) updates.artist = t.artist;
               if (t.title) updates.title = t.title;
-              
               finishAndNext(updates);
             },
-            onError: () => finishAndNext(updates)
+            onError: () => finishAndNext(updates),
           });
         } else {
           finishAndNext(updates);
         }
       };
 
-      audio.onerror = () => { finishAndNext({}); };
+      audio.onerror = () => finishAndNext({});
       audio.src = track.url;
     };
 
@@ -165,22 +158,36 @@ export const AppProvider = ({ children }) => {
       audio.onerror = null;
       audio.src = '';
     };
-  }, [allTracks.filter(t => !t.durationMs).length]);
+  }, [unprobedCount]); // FIX: stable numeric dep instead of inline .filter().length
 
-  // ── Derived: artist map ─────────────────────────────
-  const artistMap = allTracks.reduce((acc, t) => {
-    const a = t.artist || 'Unknown Artist';
-    if (!acc[a]) acc[a] = [];
-    acc[a].push(t);
-    return acc;
-  }, {});
+  // ── Derived: artist map ────────────────────────────────────────────────
+  const artistMap = useMemo(() =>
+    allTracks.reduce((acc, t) => {
+      const a = t.artist || 'Unknown Artist';
+      if (!acc[a]) acc[a] = [];
+      acc[a].push(t);
+      return acc;
+    }, {}),
+    [allTracks]
+  );
 
-  // ── Navigation helpers ─────────────────────────────
+  // ── Search: filtered tracks ────────────────────────────────────────────
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return allTracks.filter(t =>
+      t.title?.toLowerCase().includes(q) ||
+      t.artist?.toLowerCase().includes(q)
+    );
+  }, [searchQuery, allTracks]);
+
+  // ── Navigation helpers ─────────────────────────────────────────────────
   const navigate = (view, param = null, replace = false) => {
     setActiveView(view);
     setViewParam(param);
+    setSearchQuery(''); // clear search on navigation
     if (replace || view === 'home') {
-      setNavHistory([{ view, param }]); // Reset history
+      setNavHistory([{ view, param }]);
     } else {
       setNavHistory(prev => [...prev, { view, param }]);
     }
@@ -189,7 +196,7 @@ export const AppProvider = ({ children }) => {
   const goBack = () => {
     if (navHistory.length <= 1) return;
     const newHistory = [...navHistory];
-    newHistory.pop(); // remove current
+    newHistory.pop();
     const prev = newHistory[newHistory.length - 1];
     setNavHistory(newHistory);
     setActiveView(prev.view);
@@ -200,12 +207,11 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider value={{
       allTracks, folders, artistMap, isLoading, loadError,
       activeView, viewParam, navigate, goBack, canGoBack: navHistory.length > 1,
-      showNowPlaying,
-      setShowNowPlaying,
-      mobileNavOpen,
-      setMobileNavOpen,
-      viewMode,
-      setViewMode: updateViewMode
+      showNowPlaying, setShowNowPlaying,
+      mobileNavOpen, setMobileNavOpen,
+      viewMode, setViewMode,
+      searchQuery, setSearchQuery,
+      searchResults,
     }}>
       {children}
     </AppContext.Provider>

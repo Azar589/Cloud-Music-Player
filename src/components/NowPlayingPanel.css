@@ -786,6 +786,101 @@
   font-weight: 600;
 }
 
+/* ── Flip Card Effects ── */
+.np-cover-flipper {
+  perspective: 1000px;
+  width: 260px;
+  height: 260px;
+  margin-top: 32px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.np-cover-flipper-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.np-cover-flipper.flipped .np-cover-flipper-inner {
+  transform: rotateY(-180deg);
+}
+
+.np-cover-front, .np-cover-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 20px;
+}
+
+.np-cover-front {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.np-cover-back {
+  transform: rotateY(-180deg);
+  background: rgba(22, 22, 28, 0.9);
+  backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.track-details-card.center-aligned {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+}
+
+.details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.detail-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-bottom: 8px;
+}
+
+.detail-entry:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.detail-prop {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+}
+
+.detail-val {
+  color: #ffffff;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 768px) {
 
   /* Common Bottom Sheet rules */

@@ -9,15 +9,61 @@ import './App.css';
 import { useAudioPlayer } from './context/AudioPlayerContext';
 import { useApp } from './context/AppContext';
 
+// ── Error Boundary ──────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('App crashed:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          height: '100vh', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          background: '#0a0a0e', color: '#fff', gap: 16, padding: 24,
+        }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Something went wrong</h2>
+          <p style={{ color: '#a1a1aa', fontSize: '0.9rem', textAlign: 'center', maxWidth: 400 }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              background: '#8b3dff', color: '#fff', border: 'none',
+              borderRadius: 8, padding: '10px 24px', cursor: 'pointer',
+              fontSize: '0.9rem', fontWeight: 600,
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Layout (inner — needs context) ─────────────────────────────────────────
 const AppLayout = () => {
   const { currentTrack } = useAudioPlayer();
   const { showNowPlaying } = useApp();
+
   return (
     <div className={`app-container ${showNowPlaying ? 'np-expanded' : ''}`}>
       {currentTrack?.coverUrl && (
-        <div 
-          className="ambient-bg" 
-          style={{ backgroundImage: `url(${currentTrack.coverUrl})` }} 
+        <div
+          className="ambient-bg"
+          style={{ backgroundImage: `url(${currentTrack.coverUrl})` }}
         />
       )}
       {!showNowPlaying && <Sidebar />}
@@ -26,14 +72,17 @@ const AppLayout = () => {
   );
 };
 
+// ── Root ────────────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <AppProvider>
-      <PlaylistProvider>
-        <AudioPlayerProvider>
-          <AppLayout />
-        </AudioPlayerProvider>
-      </PlaylistProvider>
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <PlaylistProvider>
+          <AudioPlayerProvider>
+            <AppLayout />
+          </AudioPlayerProvider>
+        </PlaylistProvider>
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

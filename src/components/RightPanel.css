@@ -10,7 +10,7 @@
   gap: 28px;
 }
 
-
+/* .rp-section padding is managed by gap in parent (.right-panel) */
 
 .rp-header {
   display: flex;
@@ -36,8 +36,34 @@
   font-weight: 600;
   transition: color var(--transition-fast);
 }
-.see-all-btn:hover { color: var(--text-primary); }
 
+.see-all-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Tags */
+.tags-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* FIX: .tag-pill was never closed; all subsequent rules were nested inside it */
+.tag-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tag-pill:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
 
 /* ── Now Playing (Large Area) ── */
 .now-playing-large {
@@ -48,7 +74,7 @@
   padding: 16px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .np-cover-wrap {
@@ -56,7 +82,7 @@
   aspect-ratio: 1;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .np-cover {
@@ -66,25 +92,58 @@
 }
 
 .np-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 30px 0; color: var(--text-tertiary); font-size: 0.85rem;
-}
-.np-empty-cover {
-  width: 120px; height: 120px; border-radius: 8px;
-  background: var(--bg-elevated); border: 1px dashed var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 0;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
 }
 
-.np-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-.np-artist { font-size: 0.85rem; color: var(--text-secondary); }
+.np-empty-cover {
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-subtle);
+}
+
+.np-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.np-artist {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
 
 /* ── Queue Section ── */
-.rp-queue { margin-top: 10px; }
-.queue-count { font-size: 0.75rem; color: var(--text-tertiary); font-weight: normal; }
-.queue-list-wrap { scrollbar-width: none; }
-.queue-list-wrap::-webkit-scrollbar { display: none; }
+.rp-queue {
+  margin-top: 10px;
+}
 
-/* Recently Played */
-.played-list { list-style: none; }
+.queue-count {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-weight: normal;
+}
+
+.queue-list-wrap {
+  scrollbar-width: none;
+}
+
+.queue-list-wrap::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Recently Played ── */
+.played-list {
+  list-style: none;
+}
 
 .played-item {
   display: flex;
@@ -96,7 +155,10 @@
   transition: background var(--transition-fast);
 }
 
-.played-item:hover, .played-item.played-active { background: var(--bg-card); }
+.played-item:hover,
+.played-item.played-active {
+  background: var(--bg-card);
+}
 
 .played-thumb-wrap {
   position: relative;
@@ -117,7 +179,7 @@
   position: absolute;
   inset: 0;
   border-radius: 6px;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -128,7 +190,9 @@
 }
 
 .played-item:hover .played-thumb-overlay,
-.played-item.played-active .played-thumb-overlay { opacity: 1; }
+.played-item.played-active .played-thumb-overlay {
+  opacity: 1;
+}
 
 .rp-empty {
   font-size: 0.82rem;
@@ -166,8 +230,10 @@
   white-space: nowrap;
 }
 
-/* Featured Album Card */
-.rp-featured { margin-top: auto; }
+/* ── Featured Album Card ── */
+.rp-featured {
+  margin-top: auto;
+}
 
 .featured-card {
   border-radius: 14px;
@@ -212,23 +278,25 @@
   color: var(--text-secondary);
 }
 
-.featured-add-btn, .featured-play-btn {
+.featured-add-btn,
+.featured-play-btn {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   transition: background var(--transition-fast), transform var(--transition-bounce);
   flex-shrink: 0;
 }
 
-.featured-add-btn:hover, .featured-play-btn:hover {
+.featured-add-btn:hover,
+.featured-play-btn:hover {
   background: var(--accent-primary);
   transform: scale(1.1);
 }

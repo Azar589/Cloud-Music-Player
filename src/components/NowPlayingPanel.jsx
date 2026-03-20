@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useApp } from '../context/AppContext';
 import {
@@ -16,6 +16,14 @@ const formatTime = (s) => {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
 const NowPlayingPanel = ({ onClose }) => {
   const {
     isPlaying, currentTrack, progress, currentTime, duration, volume,
@@ -30,6 +38,8 @@ const NowPlayingPanel = ({ onClose }) => {
   const [showSleep, setShowSleep] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [draggedIdx, setDraggedIdx] = useState(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [sizeFromHead, setSizeFromHead] = useState(null);
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
   const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
@@ -48,7 +58,7 @@ const NowPlayingPanel = ({ onClose }) => {
     const draggedItem = newItems[draggedIdx];
     newItems.splice(draggedIdx, 1);
     newItems.splice(targetIdx, 0, draggedItem);
-    
+
     const pastTracks = currentIdx !== -1 ? queue.slice(0, currentIdx) : [];
     const fullQueue = currentTrack ? [...pastTracks, currentTrack, ...newItems] : newItems;
     setQueue(fullQueue);
@@ -119,6 +129,23 @@ const NowPlayingPanel = ({ onClose }) => {
     ? currentTrack.coverUrl
     : logo;
 
+  useEffect(() => {
+    let isMounted = true;
+    if (isFlipped && currentTrack?.url && !currentTrack.size && !sizeFromHead) {
+      fetch(currentTrack.url, { method: 'HEAD' })
+        .then(res => {
+          const s = res.headers.get('Content-Length');
+          if (s && isMounted) setSizeFromHead(Number(s));
+        })
+        .catch(() => { });
+    }
+    return () => { isMounted = false; };
+  }, [isFlipped, currentTrack, sizeFromHead]);
+
+  const sizeBytes = currentTrack?.size ? Number(currentTrack.size) : (sizeFromHead || 0);
+  const durationSec = duration > 0 ? duration : (currentTrack?.durationMs ? currentTrack.durationMs / 1000 : 0);
+  const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
+
   return (
     <div className="np-overlay">
       {/* Top Header */}
@@ -138,52 +165,93 @@ const NowPlayingPanel = ({ onClose }) => {
           style={{ backgroundImage: `url(${coverSrc})` }}
         />
 
-        {/* Visual Display */}
-        {viewMode === 'vinyl' ? (
-          <div className="np-turntable" style={{ cursor: 'default' }}>
-            {/* The tonearm */}
-            <div
-              className={`tonearm-wrap ${isPlaying ? 'arm-on' : 'arm-off'}`}
-              onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              <div className="tonearm-base">
-                <div className="tonearm-base-inner" />
-                <div className="tonearm-base-ring" />
-                <div className="tonearm-base-dot" />
-              </div>
+        {/* Visual Display with Flip Card */}
+        <div className={`np-cover-flipper ${isFlipped ? 'flipped' : ''}`} onClick={() => setIsFlipped(!isFlipped)}>
+          <div className="np-cover-flipper-inner">
+            <div className="np-cover-front">
+              {viewMode === 'vinyl' ? (
+                <div className="np-turntable" style={{ cursor: 'default' }}>
+                  {/* The tonearm */}
+                  <div
+                    className={`tonearm-wrap ${isPlaying ? 'arm-on' : 'arm-off'}`}
+                    onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                    title={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    <div className="tonearm-base">
+                      <div className="tonearm-base-inner" />
+                      <div className="tonearm-base-ring" />
+                      <div className="tonearm-base-dot" />
+                    </div>
 
-              <div className="tonearm-counterweight" />
+                    <div className="tonearm-counterweight" />
 
-              <div className="tonearm-segment-1">
-                <div className="tonearm-segment-2">
-                  <div className="tonearm-head">
-                    <div className="tonearm-head-connector" />
-                    <div className="tonearm-head-body">
-                      <div className="tonearm-needle-lines" />
+                    <div className="tonearm-segment-1">
+                      <div className="tonearm-segment-2">
+                        <div className="tonearm-head">
+                          <div className="tonearm-head-connector" />
+                          <div className="tonearm-head-body">
+                            <div className="tonearm-needle-lines" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vinyl record disc */}
+                  <div className={`vinyl-disc ${isPlaying ? 'spinning' : ''}`}>
+                    <div className="vinyl-groove g1" />
+                    <div className="vinyl-groove g2" />
+                    <div className="vinyl-groove g3" />
+                    <div className="vinyl-groove g4" />
+                    <div className="vinyl-label">
+                      <img src={coverSrc || logo} alt="album" className="vinyl-label-img" />
+                      <div className="vinyl-spindle" />
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="np-squircle-cover-wrapper" style={{ marginTop: 0 }}>
+                  <img src={coverSrc || logo} alt="album" className="np-squircle-cover" />
+                </div>
+              )}
             </div>
 
-            {/* Vinyl record disc */}
-            <div className={`vinyl-disc ${isPlaying ? 'spinning' : ''}`}>
-              <div className="vinyl-groove g1" />
-              <div className="vinyl-groove g2" />
-              <div className="vinyl-groove g3" />
-              <div className="vinyl-groove g4" />
-              <div className="vinyl-label">
-                <img src={coverSrc || logo} alt="album" className="vinyl-label-img" />
-                <div className="vinyl-spindle" />
+            <div className="np-cover-back">
+              <div className="track-details-card center-aligned">
+                <div className="details-list">
+                  <div className="detail-entry">
+                    <span className="detail-prop">Codec</span>
+                    <span className="detail-val">{currentTrack?.format || 'Unknown'}</span>
+                  </div>
+                  {currentTrack?.channels && (
+                    <div className="detail-entry">
+                      <span className="detail-prop">Channels</span>
+                      <span className="detail-val">{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : currentTrack.channels}</span>
+                    </div>
+                  )}
+                  {currentTrack?.sampleRate && (
+                    <div className="detail-entry">
+                      <span className="detail-prop">Sample rate</span>
+                      <span className="detail-val">{currentTrack.sampleRate} Hz</span>
+                    </div>
+                  )}
+                  {currentTrack?.bitsPerSample && (
+                    <div className="detail-entry">
+                      <span className="detail-prop">Bits per sample</span>
+                      <span className="detail-val">{currentTrack.bitsPerSample}</span>
+                    </div>
+                  )}
+                  {sizeBytes > 0 && (
+                    <div className="detail-entry">
+                      <span className="detail-prop">Size</span>
+                      <span className="detail-val">{formatBytes(sizeBytes)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        ) : (
-          <div className="np-squircle-cover-wrapper">
-            <img src={coverSrc || logo} alt="album" className="np-squircle-cover" />
-          </div>
-        )}
+        </div>
 
         {/* Track Info */}
         <div className="np-info">
@@ -331,10 +399,10 @@ const NowPlayingPanel = ({ onClose }) => {
                 <div className="bottom-sheet-drag-handle"></div>
                 <div className="more-popup-title">Display Mode</div>
                 <button className={`more-item ${viewMode === 'vinyl' ? 'item-active' : ''}`} onClick={() => { setViewMode('vinyl'); setShowMoreOptions(false); }}>
-                   Rotating Disc
+                  Rotating Disc
                 </button>
                 <button className={`more-item ${viewMode === 'squircle' ? 'item-active' : ''}`} onClick={() => { setViewMode('squircle'); setShowMoreOptions(false); }}>
-                   Squircle Cover
+                  Squircle Cover
                 </button>
               </div>
             )}

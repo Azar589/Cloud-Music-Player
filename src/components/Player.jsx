@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
-import { FaPlay, FaPause, FaStepBackward, FaStepForward, FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute, FaListUl, FaBars, FaMoon } from 'react-icons/fa';
+import {
+  FaPlay, FaPause, FaStepBackward, FaStepForward,
+  FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute,
+  FaListUl, FaBars, FaMoon
+} from 'react-icons/fa';
 import logo from '../assets/logo.png';
 import { useApp } from '../context/AppContext';
 import './Player.css';
@@ -18,7 +22,8 @@ const Player = () => {
     isShuffled, isRepeating, queue, sleepTimeLeft, startSleepTimer,
     togglePlay, toggleShuffle, toggleRepeat,
     updateVolume, toggleMute, seek,
-    nextTrack, prevTrack, playTrack, setQueue
+    nextTrack, prevTrack, playTrack, setQueue,
+    setProgress, setCurrentTime
   } = useAudioPlayer();
 
   const [showQueue, setShowQueue] = useState(false);
@@ -26,72 +31,91 @@ const Player = () => {
   const [draggedIdx, setDraggedIdx] = useState(null);
   const { setShowNowPlaying } = useApp();
 
-  // Close popups on click outside
+  // FIX: declare before any function that uses it
+  const noTrack = !currentTrack;
+
+  // Close popups on outside click
   React.useEffect(() => {
     if (!showQueue && !showSleep) return;
-    const hidePopups = () => {
-      setShowQueue(false);
-      setShowSleep(false);
-    };
-    document.addEventListener('click', hidePopups);
-    return () => document.removeEventListener('click', hidePopups);
+    const hide = () => { setShowQueue(false); setShowSleep(false); };
+    document.addEventListener('click', hide);
+    return () => document.removeEventListener('click', hide);
   }, [showQueue, showSleep]);
 
+  // ── Drag-to-reorder helpers ──────────────────────────────────────────────
   const handleDragStart = (e, idx) => {
     setDraggedIdx(idx);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.effectAllowed = 'move';
   };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
+  const handleDragOver = (e) => e.preventDefault();
   const handleDrop = (e, targetIdx) => {
     e.preventDefault();
     if (draggedIdx === null || draggedIdx === targetIdx) return;
-
     const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
     const visibleQueue = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
     const newItems = [...visibleQueue];
-    const draggedItem = newItems[draggedIdx];
-    newItems.splice(draggedIdx, 1);
-    newItems.splice(targetIdx, 0, draggedItem);
-
-    const fullQueue = currentIdx !== -1 
-      ? [...queue.slice(0, currentIdx + 1), ...newItems] 
+    const dragged = newItems.splice(draggedIdx, 1)[0];
+    newItems.splice(targetIdx, 0, dragged);
+    const fullQueue = currentIdx !== -1
+      ? [...queue.slice(0, currentIdx + 1), ...newItems]
       : (currentTrack ? [currentTrack, ...newItems] : newItems);
     setQueue(fullQueue);
     setDraggedIdx(null);
   };
 
-  const handleDrag = (e, type) => {
+  // ── FIX: unified drag handler that supports both mouse and touch ─────────
+  const makeDragHandler = (type) => (e) => {
     if (noTrack && type === 'seek') return;
-    const bar = e.currentTarget;
 
-    const update = (clientX) => {
-      const r = bar.getBoundingClientRect();
-      const val = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-      if (type === 'seek') seek(val);
-      else updateVolume(val);
+    const getX = (evt) => {
+      if (evt.touches && evt.touches.length > 0) return evt.touches[0].clientX;
+      if (evt.changedTouches && evt.changedTouches.length > 0) return evt.changedTouches[0].clientX;
+      return evt.clientX;
     };
 
-    update(e.clientX);
+    const bar = e.currentTarget;
+    const r = bar.getBoundingClientRect();
+    const compute = (clientX) => Math.max(0, Math.min(1, (clientX - r.left) / r.width));
 
-    const onMove = (mE) => update(mE.clientX);
-    const onEnd = () => {
+    const apply = (val, isEnd = false) => {
+      if (type === 'seek') {
+        if (isEnd) seek(val);
+        else {
+          setProgress(val);
+          if (duration) setCurrentTime(val * duration);
+        }
+      } else {
+        updateVolume(val);
+      }
+    };
+
+    apply(compute(getX(e)));
+
+    const onMove = (mE) => {
+      if (mE.cancelable) mE.preventDefault();
+      apply(compute(getX(mE)), false);
+    };
+    const onEnd = (mE) => {
+      apply(compute(getX(mE)), true);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
   };
 
-  const noTrack = !currentTrack;
+  const handleSeekDrag = makeDragHandler('seek');
+  const handleVolumeDrag = makeDragHandler('volume');
 
   return (
     <div className="player">
       <div className="player-inner">
-        {/* 1. Left: Now Playing Info + Actions */}
+
+        {/* ── Left: Now Playing ── */}
         <div className="player-now-playing">
           {currentTrack?.coverUrl && !currentTrack.coverUrl.includes('images.unsplash.com') ? (
             <img
@@ -114,10 +138,9 @@ const Player = () => {
             <span className="now-playing-title ellipsis">{currentTrack?.title || 'No track selected'}</span>
             <span className="now-playing-artist ellipsis">{currentTrack?.artist || 'Unknown Artist'}</span>
           </div>
-
         </div>
 
-        {/* 2. Center: Playback Controls & Seekbar Stacked */}
+        {/* ── Center: Controls + Seekbar ── */}
         <div className="player-center">
           <div className="player-controls">
             <button className={`p-ctrl-btn ${isShuffled ? 'ctrl-active' : ''}`} onClick={toggleShuffle} title="Shuffle">
@@ -141,48 +164,50 @@ const Player = () => {
             </button>
           </div>
 
-          {/* Seekbar beneath controls */}
+          {/* Seekbar — mouse + touch */}
           <div className="player-seekbar-row">
             <span className="player-time">{formatTime(currentTime)}</span>
-
-            <div className={`player-progress-wrap ${isDownloading ? 'loading' : ''}`} onMouseDown={e => handleDrag(e, 'seek')} style={{ pointerEvents: noTrack ? 'none' : 'auto' }}>
+            <div
+              className={`player-progress-wrap ${isDownloading ? 'loading' : ''}`}
+              onMouseDown={handleSeekDrag}
+              onTouchStart={handleSeekDrag}
+              style={{ pointerEvents: noTrack ? 'none' : 'auto' }}
+            >
               <div className="player-progress-bg">
                 <div className="player-progress-fill" style={{ width: `${progress * 100}%` }} />
                 <div className="player-progress-handle" style={{ left: `${progress * 100}%` }} />
               </div>
             </div>
-
             <span className="player-time">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* 3. Right: Volume & More Tools */}
+        {/* ── Right: Volume + Queue + Sleep ── */}
         <div className="player-right">
-          
+
           {/* Sleep Timer */}
           <div className="sleep-timer-wrap" style={{ position: 'relative' }}>
-            <button 
-              className={`p-ctrl-btn ${sleepTimeLeft ? 'ctrl-active' : ''}`} 
-              onClick={(e) => { e.stopPropagation(); setShowSleep(!showSleep); }} 
+            <button
+              className={`p-ctrl-btn ${sleepTimeLeft ? 'ctrl-active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setShowSleep(!showSleep); }}
               title="Sleep Timer"
             >
               <FaMoon />
               {sleepTimeLeft && <span className="sleep-badge">{Math.ceil(sleepTimeLeft / 60)}m</span>}
             </button>
-
             {showSleep && (
               <div className="sleep-popup" onClick={e => e.stopPropagation()}>
                 <div className="sleep-popup-title">Sleep Timer</div>
-                <button className="sleep-item" onClick={() => { startSleepTimer(0); setShowSleep(false); }}>Off</button>
-                <button className="sleep-item" onClick={() => { startSleepTimer(5); setShowSleep(false); }}>5 min</button>
-                <button className="sleep-item" onClick={() => { startSleepTimer(15); setShowSleep(false); }}>15 min</button>
-                <button className="sleep-item" onClick={() => { startSleepTimer(30); setShowSleep(false); }}>30 min</button>
-                <button className="sleep-item" onClick={() => { startSleepTimer(60); setShowSleep(false); }}>60 min</button>
+                {[0, 5, 15, 30, 60].map(m => (
+                  <button key={m} className="sleep-item" onClick={() => { startSleepTimer(m); setShowSleep(false); }}>
+                    {m === 0 ? 'Off' : `${m} min`}
+                  </button>
+                ))}
               </div>
             )}
           </div>
 
-
+          {/* Queue */}
           <button
             className={`p-queue-btn ${showQueue ? 'active' : ''}`}
             onClick={(e) => { e.stopPropagation(); setShowQueue(!showQueue); }}
@@ -191,25 +216,27 @@ const Player = () => {
             <FaListUl />
           </button>
 
-
-
+          {/* Volume — mouse + touch */}
           <div className="volume-wrapper">
             <button className="p-icon-btn" onClick={toggleMute} title={volume === 0 ? 'Unmute' : 'Mute'}>
               {volume === 0 ? <FaVolumeMute /> : <FaVolumeUp />}
             </button>
-            <div className="volume-track" onMouseDown={e => handleDrag(e, 'volume')} title="Volume">
+            <div
+              className="volume-track"
+              onMouseDown={handleVolumeDrag}
+              onTouchStart={handleVolumeDrag}
+              title="Volume"
+            >
               <div className="volume-fill" style={{ width: `${volume * 100}%` }} />
               <div className="volume-handle" style={{ left: `${volume * 100}%` }} />
             </div>
           </div>
 
-
-
+          {/* Queue popup */}
           {showQueue && (
-            <div className="queue-popup">
+            <div className="queue-popup" onClick={e => e.stopPropagation()}>
               <div className="queue-popup-hdr">Queue</div>
               <div className="queue-popup-list">
-                {/* 1. Now Playing always at top */}
                 {currentTrack && (
                   <div className="queue-item queue-item-active now-playing-row">
                     <span className="queue-item-idx"><FaPlay style={{ fontSize: '0.6rem' }} /></span>
@@ -219,16 +246,18 @@ const Player = () => {
                     </div>
                   </div>
                 )}
-
-                {currentTrack && queue.filter(t => t.id !== currentTrack.id).length > 0 && (
-                  <div className="queue-sec-hdr">Next Up</div>
-                )}
-
-                {/* 2. Scrollable / Draggable rest */}
+                {(() => {
+                  const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
+                  const nextUp = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
+                  if (nextUp.length > 0 && currentTrack) {
+                    return <div className="queue-sec-hdr">Next Up</div>;
+                  }
+                })()}
                 {(() => {
                   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
                   const nextUp = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
                   return nextUp.map((t, idx) => (
+                    // FIX: stable key — don't mix id with idx
                     <div
                       key={t.id}
                       className="queue-item draggable"
@@ -243,13 +272,10 @@ const Player = () => {
                         <div className="queue-item-title ellipsis">{t.title}</div>
                         <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
                       </div>
-                      <div className="queue-drag-handle" title="Drag to reorder">
-                        <FaBars />
-                      </div>
+                      <div className="queue-drag-handle" title="Drag to reorder"><FaBars /></div>
                     </div>
                   ));
                 })()}
-
                 {queue.length === 0 && <div className="queue-empty">Your queue is empty.</div>}
               </div>
             </div>

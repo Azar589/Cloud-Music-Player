@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { usePlaylists } from '../context/PlaylistContext';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
-import { FaPlay, FaPause, FaFolder, FaMusic, FaMicrophone, FaTrash, FaChevronLeft, FaBars, FaEllipsisV } from 'react-icons/fa';
+import {
+  FaPlay, FaPause, FaFolder, FaMusic, FaMicrophone,
+  FaTrash, FaChevronLeft, FaBars, FaEllipsisV, FaSearch,
+} from 'react-icons/fa';
 import Player from './Player';
 import NowPlayingPanel from './NowPlayingPanel';
 import logo from '../assets/logo.png';
 import { MdPlaylistAdd } from 'react-icons/md';
 import './MainView.css';
 
-const HERO_BG = 'https://images.unsplash.com/photo-1493225457124-a3a2fcf0c374?w=800&q=80';
-
+// ── Track Table ──────────────────────────────────────────────────────────────
 const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
   const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
   const { removeFromPlaylist } = usePlaylists();
@@ -24,7 +25,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
       {showHeader && (
         <thead>
           <tr className="track-table-hdr">
-            <th>  #</th>
+            <th>#</th>
             <th>SONG</th>
             <th>QUALITY</th>
             <th>ARTIST</th>
@@ -40,7 +41,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
           const isHov = hoveredRow === track.id;
           return (
             <tr
-              key={track.id}
+              key={track.id}   // FIX: stable key — no idx suffix
               className={`track-row ${isActive ? 'row-active' : ''}`}
               onClick={() => {
                 if (isActive) togglePlay();
@@ -79,12 +80,23 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
                 {track.format ? (
                   <div className="quality-cell">
                     <span className="format-badge">{track.format}</span>
-                    <span className="quality-text">{track.quality || 'Standard'}</span>
+                    <span className="quality-text">
+                      {(() => {
+                        if (track.bitsPerSample && track.sampleRate) {
+                          return `${track.bitsPerSample}-Bit • ${track.sampleRate / 1000} kHz`;
+                        }
+                        if (track.quality) return track.quality;
+                        const sizeBytes = track.size ? Number(track.size) : 0;
+                        const durationSec = track.durationMs ? track.durationMs / 1000 : 0;
+                        const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
+                        return bitrate > 0 ? `${bitrate} kbps` : 'Standard';
+                      })()}
+                    </span>
                   </div>
                 ) : <span className="quality-text">Standard</span>}
               </td>
               <td className="td-artist ellipsis">{track.artist || 'Unknown Artist'}</td>
-              <td className="td-time" style={{ textAlign: 'right' }}>{track.duration !== 'Unknown' ? track.duration : '--:--'}</td>
+              <td className="td-time" style={{ textAlign: 'right' }}>{track.durationStr || track.duration || '--:--'}</td>
               <td className="td-add-queue" onClick={(e) => { e.stopPropagation(); addToQueue(track); }} title="Add to Queue">
                 <MdPlaylistAdd size={18} />
               </td>
@@ -108,24 +120,29 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
   );
 };
 
+// ── Main View ────────────────────────────────────────────────────────────────
 const MainView = () => {
   const { playTrack, currentTrack, isPlaying, togglePlay, setQueue, recentlyPlayed } = useAudioPlayer();
   const {
     isLoading, loadError, allTracks, folders, artistMap,
     activeView, viewParam, navigate, goBack, canGoBack,
-    showNowPlaying, setShowNowPlaying, setMobileNavOpen
+    showNowPlaying, setShowNowPlaying, setMobileNavOpen,
+    searchQuery, searchResults,
   } = useApp();
   const { playlists } = usePlaylists();
-  const [recentCardSize, setRecentCardSize] = useState(160);
+
+  // FIX: removed unused HERO_BG constant and unused recentCardSize state
 
   const renderHome = () => (
     <>
-      <div className="playlist-title-row" style={{ marginTop: 24 }}><h2 className="playlist-title">Home</h2></div>
+      <div className="playlist-title-row" style={{ marginTop: 24 }}>
+        <h2 className="playlist-title">Home</h2>
+      </div>
 
       {recentlyPlayed.length > 0 && (
         <div className="recent-section">
           <div className="playlist-title-row"><h3 className="section-subtitle">Recently Played</h3></div>
-          <div className="recent-grid" style={{ '--recent-size': `${recentCardSize}px` }}>
+          <div className="recent-grid">
             {recentlyPlayed.map(t => (
               <div key={t.id} className="recent-card" onClick={() => { setQueue([t]); playTrack(t); }}>
                 <div className="recent-cover-wrap">
@@ -156,7 +173,9 @@ const MainView = () => {
             </div>
           </div>
         ))}
-        {folders.length === 0 && <p className="track-empty" style={{ gridColumn: '1/-1' }}>No audio folders found.</p>}
+        {folders.length === 0 && (
+          <p className="track-empty" style={{ gridColumn: '1/-1' }}>No audio folders found.</p>
+        )}
       </div>
     </>
   );
@@ -232,6 +251,23 @@ const MainView = () => {
     );
   };
 
+  // FIX: new search results view
+  const renderSearch = () => (
+    <>
+      <div className="playlist-title-row">
+        <h2 className="playlist-title">
+          <FaSearch style={{ marginRight: 10, fontSize: '1.2rem', opacity: 0.6 }} />
+          "{searchQuery}"
+        </h2>
+        <span className="subtitle-count">{searchResults.length} results</span>
+      </div>
+      {searchResults.length === 0
+        ? <p className="track-empty">No tracks match your search.</p>
+        : <TrackTable tracks={searchResults} />
+      }
+    </>
+  );
+
   return (
     <section className="main-view">
       {showNowPlaying && (
@@ -251,8 +287,8 @@ const MainView = () => {
         )}
         <div className="mv-spacer" />
       </div>
-      <div className="mv-scroll" style={{ paddingTop: 8 }}>
 
+      <div className="mv-scroll" style={{ paddingTop: 8 }}>
         {isLoading ? (
           <div className="track-loading">
             <div className="loading-spinner" />
@@ -268,6 +304,7 @@ const MainView = () => {
             {activeView === 'folder' && renderFolderDetail()}
             {activeView === 'artist-detail' && renderArtistDetail()}
             {activeView === 'playlist-detail' && renderPlaylistDetail()}
+            {activeView === 'search' && renderSearch()}
           </>
         )}
       </div>

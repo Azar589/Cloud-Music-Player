@@ -1,13 +1,21 @@
 import React, { useState } from 'react';
 import logo from '../assets/logo.png';
-import { FaHome, FaMusic, FaMicrophone, FaListUl, FaPlus, FaTrash, FaSignOutAlt, FaChevronDown, FaChevronRight, FaTimes } from 'react-icons/fa';
+import {
+  FaHome, FaMusic, FaMicrophone, FaListUl,
+  FaPlus, FaTrash, FaSignOutAlt,
+  FaChevronDown, FaChevronRight, FaTimes,
+} from 'react-icons/fa';
 import { BiSearchAlt } from 'react-icons/bi';
 import { useApp } from '../context/AppContext';
 import { usePlaylists } from '../context/PlaylistContext';
 import './Sidebar.css';
 
 const Sidebar = () => {
-  const { activeView, navigate, allTracks, mobileNavOpen, setMobileNavOpen } = useApp();
+  const {
+    activeView, viewParam, navigate,
+    allTracks, mobileNavOpen, setMobileNavOpen,
+    searchQuery, setSearchQuery,
+  } = useApp();
   const { playlists, createPlaylist, deletePlaylist } = usePlaylists();
 
   const user = { name: 'Mohamed Azarudeen F', email: 'Cloudflare' };
@@ -20,9 +28,12 @@ const Sidebar = () => {
   const handleCreatePlaylist = (e) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
-    createPlaylist(newPlaylistName.trim());
+    const id = createPlaylist(newPlaylistName.trim());
     setNewPlaylistName('');
     setShowNewInput(false);
+    // Navigate to the new playlist immediately
+    navigate('playlist-detail', id);
+    setMobileNavOpen(false);
   };
 
   const navItems = [
@@ -31,8 +42,20 @@ const Sidebar = () => {
     { icon: <FaMicrophone />, label: 'Artists', view: 'artists' },
   ];
 
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    // If there is a search query, show search results in main view
+    if (val.trim()) {
+      navigate('search', null);
+    } else {
+      navigate('home', null, true);
+    }
+  };
+
   return (
     <nav className={`sidebar ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+
       {/* Logo */}
       <div className="sidebar-logo">
         <img src={logo} alt="Cloud Music" className="sidebar-logo-img" />
@@ -42,10 +65,24 @@ const Sidebar = () => {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Search — FIX: wired up with value + onChange */}
       <div className="sidebar-search">
         <BiSearchAlt className="s-icon" />
-        <input type="text" id="sidebar-search-input" name="search" placeholder="Search tracks..." />
+        <input
+          type="text"
+          placeholder="Search tracks..."
+          value={searchQuery}
+          onChange={handleSearchChange}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => { setSearchQuery(''); navigate('home', null, true); }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '0.75rem' }}
+            title="Clear search"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Main nav */}
@@ -70,7 +107,11 @@ const Sidebar = () => {
           <FaListUl style={{ fontSize: '0.8rem' }} />
           <span>Playlists</span>
           <span className="badge-count">{playlists.length}</span>
-          <button className="pl-add-btn" title="New playlist" onClick={(e) => { e.stopPropagation(); setShowNewInput(v => !v); }}>
+          <button
+            className="pl-add-btn"
+            title="New playlist"
+            onClick={(e) => { e.stopPropagation(); setShowNewInput(v => !v); }}
+          >
             <FaPlus />
           </button>
           <span className="pl-chevron">{playlistsOpen ? <FaChevronDown /> : <FaChevronRight />}</span>
@@ -80,8 +121,6 @@ const Sidebar = () => {
           <form className="new-playlist-form" onSubmit={handleCreatePlaylist}>
             <input
               type="text"
-              id="new-playlist-name-input"
-              name="playlistName"
               placeholder="Playlist name..."
               value={newPlaylistName}
               onChange={e => setNewPlaylistName(e.target.value)}
@@ -99,7 +138,8 @@ const Sidebar = () => {
             {playlists.map(pl => (
               <li
                 key={pl.id}
-                className={`nav-item pl-item ${activeView === 'playlist-detail' ? 'active' : ''}`}
+                // FIX: check both activeView AND viewParam so only the selected playlist highlights
+                className={`nav-item pl-item ${activeView === 'playlist-detail' && viewParam === pl.id ? 'active' : ''}`}
                 onClick={() => { navigate('playlist-detail', pl.id); setMobileNavOpen(false); }}
               >
                 <span className="nav-icon"><FaListUl /></span>
@@ -118,7 +158,7 @@ const Sidebar = () => {
         )}
       </div>
 
-      {/* User */}
+      {/* User footer */}
       <div className="sidebar-user">
         <div className="user-avatar-box">
           {user?.picture

@@ -1,70 +1,101 @@
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 const AudioPlayerContext = createContext();
-
 export const useAudioPlayer = () => useContext(AudioPlayerContext);
 
 export const AudioPlayerProvider = ({ children }) => {
   const audioRef = useRef(null);
   if (audioRef.current === null) {
-    audioRef.current = new Audio();
+    const a = new Audio();
+    a.crossOrigin = 'anonymous';
+    audioRef.current = a;
   }
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('drivemusic_volume');
     return saved !== null ? parseFloat(saved) : 1.0;
   });
-  const [prevVolume, setPrevVolume] = useState(1.0); // Remember volume before mute
+  const [prevVolume, setPrevVolume] = useState(1.0);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isShuffled, setIsShuffled] = useState(false);
   const [isRepeating, setIsRepeating] = useState(false);
-
-  // Queue: the master list of tracks
   const [queue, setQueue] = useState([]);
   const [originalQueue, setOriginalQueue] = useState([]);
-
-  const setQueueList = (newList) => {
-    setQueue(newList);
-    setOriginalQueue(newList);
-  };
   const [recentlyPlayed, setRecentlyPlayed] = useState(() => {
-    try {
-      const saved = localStorage.getItem('drivemusic_recently_played');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
+    try { return JSON.parse(localStorage.getItem('drivemusic_recently_played') || '[]'); }
+    catch { return []; }
   });
-
-  useEffect(() => {
-    localStorage.setItem('drivemusic_recently_played', JSON.stringify(recentlyPlayed));
-  }, [recentlyPlayed]);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [sleepTimeLeft, setSleepTimeLeft] = useState(null);
+
+  // ── Stable refs so callbacks never capture stale state ─────────────────
+  const volumeRef = useRef(volume);
+  const queueRef = useRef(queue);
+  const originalQueueRef = useRef(originalQueue);
+  const isShuffledRef = useRef(isShuffled);
+  const isRepeatingRef = useRef(isRepeating);
+  const currentTrackRef = useRef(currentTrack);
+
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { originalQueueRef.current = originalQueue; }, [originalQueue]);
+  useEffect(() => { isShuffledRef.current = isShuffled; }, [isShuffled]);
+  useEffect(() => { isRepeatingRef.current = isRepeating; }, [isRepeating]);
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
   const activeLoadIdRef = useRef(null);
   const nextTrackRef = useRef(null);
   const fadeIntervalRef = useRef(null);
-  const preloadCacheRef = useRef({}); // { [trackId]: ObjectUrl }
-
-  // Sleep Timer States
-  const [sleepTimeLeft, setSleepTimeLeft] = useState(null); // in seconds
+  const preloadCacheRef = useRef({});
   const sleepIntervalRef = useRef(null);
 
+  // ── Persist recently played ─────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('drivemusic_recently_played', JSON.stringify(recentlyPlayed));
+  }, [recentlyPlayed]);
+
+  // ── Cleanup audio element on unmount ────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current;
+      audio.pause();
+      if (audio._objectUrl) URL.revokeObjectURL(audio._objectUrl);
+      audio.src = '';
+      clearInterval(fadeIntervalRef.current);
+      if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+      Object.values(preloadCacheRef.current).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  // ── Revoke preloaded URLs for tracks no longer in queue ─────────────────
+  useEffect(() => {
+    const queueIds = new Set(queue.map(t => t.id));
+    Object.keys(preloadCacheRef.current).forEach(id => {
+      if (!queueIds.has(id)) {
+        URL.revokeObjectURL(preloadCacheRef.current[id]);
+        delete preloadCacheRef.current[id];
+      }
+    });
+  }, [queue]);
+
+  // ── Expose a combined setter that also updates originalQueue ────────────
+  const setQueueList = (newList) => {
+    setQueue(newList);
+    setOriginalQueue(newList);
+  };
+
+  // ── Sleep Timer ─────────────────────────────────────────────────────────
   const startSleepTimer = useCallback((minutes) => {
     if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
-    if (minutes === 0) {
-      setSleepTimeLeft(null);
-      return;
-    }
+    if (minutes === 0) { setSleepTimeLeft(null); return; }
     setSleepTimeLeft(minutes * 60);
-    
     sleepIntervalRef.current = setInterval(() => {
       setSleepTimeLeft(prev => {
-        if (prev === null) {
-          clearInterval(sleepIntervalRef.current);
-          return null;
-        }
+        if (prev === null) { clearInterval(sleepIntervalRef.current); return null; }
         if (prev <= 1) {
           clearInterval(sleepIntervalRef.current);
           audioRef.current.pause();
@@ -84,78 +115,65 @@ export const AudioPlayerProvider = ({ children }) => {
     setSleepTimeLeft(null);
   }, []);
 
-  // Cleanup sleep interval on unmount
-  useEffect(() => {
-    return () => {
-      if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
-    };
-  }, []);
-
-  // Cleanup audio element on unmount
-  useEffect(() => {
-    return () => {
-      const audio = audioRef.current;
-      if (audio) {
-        audio.pause();
-        audio.src = '';
-        if (audio._objectUrl) {
-          URL.revokeObjectURL(audio._objectUrl);
-        }
-      }
-    };
-  }, []);
-
+  // ── Audio event listeners ────────────────────────────────────────────────
   useEffect(() => {
     const audio = audioRef.current;
-    audio.volume = volume;
+    audio.volume = volumeRef.current;
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
       setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
-
-      // --- 2s Fade Out at end of song ---
+      // Fade out 2 s before end
       if (audio.duration && (audio.duration - audio.currentTime) <= 2) {
         const remaining = audio.duration - audio.currentTime;
-        audio.volume = Math.max(0, volume * (remaining / 2));
-      } else if (!fadeIntervalRef.current && audio.volume !== volume) {
-        audio.volume = volume;
+        audio.volume = Math.max(0, volumeRef.current * (remaining / 2));
+      } else if (!fadeIntervalRef.current && audio.volume !== volumeRef.current) {
+        audio.volume = volumeRef.current;
       }
     };
+
     const handleLoadedMetadata = () => {
       const d = audio.duration;
       setDuration(d);
-      if (d && !isNaN(d) && currentTrack?.id) {
+      const track = currentTrackRef.current;
+      if (d && !isNaN(d) && track?.id) {
         try {
           const cached = JSON.parse(localStorage.getItem('drivemusic_durations') || '{}');
           const dMs = Math.round(d * 1000);
-          if (cached[currentTrack.id] !== dMs) {
-            cached[currentTrack.id] = dMs;
+          if (cached[track.id] !== dMs) {
+            cached[track.id] = dMs;
             localStorage.setItem('drivemusic_durations', JSON.stringify(cached));
-            window.dispatchEvent(new CustomEvent('trackDurationUpdated', { detail: { id: currentTrack.id, durationMs: dMs } }));
+            window.dispatchEvent(new CustomEvent('trackDurationUpdated', {
+              detail: { id: track.id, durationMs: dMs },
+            }));
           }
-        } catch (e) { }
+        } catch { /* ignore */ }
       }
     };
+
     const handleEnded = () => {
-      if (isRepeating) {
+      if (isRepeatingRef.current) {
         audio.currentTime = 0;
-        audio.play().catch(() => {});
+        audio.play().catch(() => { });
       } else if (nextTrackRef.current) {
-        nextTrackRef.current(); // Auto-advance!
+        nextTrackRef.current();
       } else {
         setIsPlaying(false);
         setProgress(0);
         setCurrentTime(0);
       }
     };
+
+    // FIX 1: ignore errors that fire when src is intentionally empty or being
+    // swapped between tracks.
+    // - audio.error code 4 = MEDIA_ELEMENT_ERROR (empty / unsupported src)
+    //   This fires normally during every track switch — suppress it.
+    // - If src equals the page URL it means no src was set at all — ignore.
     const handleError = () => {
-      // Ignore errors caused by empty src or placeholder (cleanup/mobile unlock)
-      const srcAttr = audio.getAttribute('src');
-      if (!srcAttr || srcAttr === 'about:blank') {
-        return;
-      }
+      if (!audio.src || audio.src === window.location.href) return;
+      if (audio.error?.code === 4) return; // empty src during track switch — expected
       console.error('Audio element error:', audio.error);
-      setIsPlaying(false);
+      if (activeLoadIdRef.current) setIsPlaying(false);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -169,40 +187,35 @@ export const AudioPlayerProvider = ({ children }) => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [isRepeating, currentTrack, volume]); // including currentTrack fixes duration cache scoping
+  }, []); // stable refs — runs only once
 
+  // ── Preload next track ──────────────────────────────────────────────────
   const preloadNextTrack = useCallback(async (currentIdx) => {
-    if (queue.length === 0) return;
-    let nextIdx = (currentIdx + 1) % queue.length;
-    let nextTrack = queue[nextIdx];
+    const q = queueRef.current;
+    if (q.length === 0) return;
+    const nextIdx = (currentIdx + 1) % q.length;
+    const next = q[nextIdx];
+    if (!next || preloadCacheRef.current[next.id]) return;
+    // Only preload Drive tracks (need auth header + blob).
+    // R2 tracks stream directly — no blob preload needed.
+    if (!next.headers?.Authorization) return;
+    try {
+      const res = await fetch(next.url, { headers: { Authorization: next.headers.Authorization } });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      preloadCacheRef.current[next.id] = URL.createObjectURL(blob);
+    } catch { /* ignore preload errors */ }
+  }, []);
 
-    if (isShuffled && queue.length > 1) {
-      do { nextIdx = Math.floor(Math.random() * queue.length); }
-      while (nextIdx === currentIdx);
-      nextTrack = queue[nextIdx];
-    }
-
-    if (!nextTrack || preloadCacheRef.current[nextTrack.id]) return;
-
-    if (nextTrack.headers?.Authorization) {
-      try {
-        const res = await fetch(nextTrack.url, { headers: { Authorization: nextTrack.headers.Authorization } });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        preloadCacheRef.current[nextTrack.id] = URL.createObjectURL(blob);
-      } catch (e) { /* ignore preload errors */ }
-    }
-  }, [queue, isShuffled]);
-
-  // Continuous Preload Listener
   useEffect(() => {
     if (currentTrack && queue.length > 0) {
-      const currentIdx = queue.findIndex(t => t.id === currentTrack.id);
-      if (currentIdx !== -1) preloadNextTrack(currentIdx);
+      const idx = queue.findIndex(t => t.id === currentTrack.id);
+      if (idx !== -1) preloadNextTrack(idx);
     }
-  }, [currentTrack, queue, isShuffled, preloadNextTrack]);
+  }, [currentTrack, queue, preloadNextTrack]);
 
-  const _loadAndPlay = async (track) => {
+  // ── Core load-and-play ──────────────────────────────────────────────────
+  const _loadAndPlay = useCallback(async (track) => {
     activeLoadIdRef.current = track.id;
     setCurrentTrack(track);
     setProgress(0);
@@ -223,11 +236,14 @@ export const AudioPlayerProvider = ({ children }) => {
     const cachedUrl = preloadCacheRef.current[track.id];
 
     if (cachedUrl) {
+      // Preloaded blob URL ready to go
       if (audioRef.current._objectUrl) URL.revokeObjectURL(audioRef.current._objectUrl);
       audioRef.current._objectUrl = cachedUrl;
       audioRef.current.src = cachedUrl;
       delete preloadCacheRef.current[track.id];
+
     } else if (track.headers?.Authorization) {
+      // Google Drive tracks: fetch blob first (avoids CORS range-request issues)
       try {
         setIsDownloading(true);
         const response = await fetch(track.url, {
@@ -237,161 +253,169 @@ export const AudioPlayerProvider = ({ children }) => {
           if (response.status === 401) throw new Error('AUTH_EXPIRED');
           throw new Error(`HTTP error: ${response.status}`);
         }
-
-        const contentType = response.headers.get('Content-Type');
-        if (contentType && (contentType.includes('text/html') || contentType.includes('application/json'))) {
-          const text = await response.text();
-          throw new Error(`Not an audio file (Type: ${contentType}). Body: ${text.slice(0, 100)}`);
-        }
-
         const blob = await response.blob();
-        setIsDownloading(false);
-
-        if (activeLoadIdRef.current !== track.id) {
-          return;
-        }
-
+        if (activeLoadIdRef.current !== track.id) return;
         if (audioRef.current._objectUrl) URL.revokeObjectURL(audioRef.current._objectUrl);
         const objectUrl = URL.createObjectURL(blob);
         audioRef.current._objectUrl = objectUrl;
         audioRef.current.src = objectUrl;
       } catch (error) {
-        setIsDownloading(false);
         if (activeLoadIdRef.current === track.id) {
-          console.error('Error fetching Drive audio:', error);
+          console.error('Error fetching audio:', error);
           setCurrentTrack(null);
         }
         return;
+      } finally {
+        setIsDownloading(false);
       }
+
     } else {
+      // R2 stream URL — assign directly so the browser can range-request and
+      // stream progressively. The worker now returns correct Content-Type,
+      // Content-Disposition: inline and X-Content-Type-Options: nosniff so
+      // the browser will treat it as audio without downloading the whole file.
+      if (audioRef.current._objectUrl) {
+        URL.revokeObjectURL(audioRef.current._objectUrl);
+        audioRef.current._objectUrl = null;
+      }
       audioRef.current.src = track.url;
     }
 
     if (activeLoadIdRef.current !== track.id) return;
 
     audioRef.current.load();
-    audioRef.current.volume = 0; // Start at 0 for fade in
+    audioRef.current.volume = 0; // start silent, then fade in
     audioRef.current.play()
       .then(() => {
-        if (activeLoadIdRef.current === track.id) {
-          setIsPlaying(true);
-          const currentIdx = queue.findIndex(t => t.id === track.id);
-          if (currentIdx !== -1) preloadNextTrack(currentIdx);
+        if (activeLoadIdRef.current !== track.id) return;
+        setIsPlaying(true);
+        const q = queueRef.current;
+        const idx = q.findIndex(t => t.id === track.id);
+        if (idx !== -1) preloadNextTrack(idx);
 
-          // --- 2s Fade In ---
-          clearInterval(fadeIntervalRef.current);
-          let elapsed = 0;
-          fadeIntervalRef.current = setInterval(() => {
-            elapsed += 100;
-            if (elapsed >= 2000) {
-              audioRef.current.volume = volume;
-              clearInterval(fadeIntervalRef.current);
-              fadeIntervalRef.current = null;
-            } else {
-              audioRef.current.volume = volume * (elapsed / 2000);
-            }
-          }, 100);
-        }
+        // 2 s fade in
+        clearInterval(fadeIntervalRef.current);
+        let elapsed = 0;
+        fadeIntervalRef.current = setInterval(() => {
+          elapsed += 100;
+          if (elapsed >= 2000) {
+            audioRef.current.volume = volumeRef.current;
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+          } else {
+            audioRef.current.volume = volumeRef.current * (elapsed / 2000);
+          }
+        }, 100);
       })
       .catch(e => {
-        if (e.name === 'AbortError') return; // Ignore play/pause interruptions
+        if (e.name === 'AbortError') return;
         if (activeLoadIdRef.current === track.id) console.error('Playback failed:', e);
       });
-  };
+  }, [preloadNextTrack]);
 
-  const playTrack = async (track) => {
-    if (currentTrack?.id === track.id) { togglePlay(); return; }
-    
-
+  // ── Public play ─────────────────────────────────────────────────────────
+  // FIX 3: removed `audio.src = 'about:blank'` unlock hack — it was the root
+  // cause of MEDIA_ELEMENT_ERROR / DEMUXER_ERROR_COULD_NOT_OPEN spam.
+  // R2 stream URLs are assigned directly, so no unlock trick is needed.
+  const playTrack = useCallback(async (track) => {
+    if (currentTrackRef.current?.id === track.id) { togglePlay(); return; }
     await _loadAndPlay(track);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_loadAndPlay]);
 
+  // ── Next / Prev (shuffle-aware) ─────────────────────────────────────────
   const nextTrack = useCallback(async () => {
-    if (!queue.length || !currentTrack) return;
-    const currentIdx = queue.findIndex(t => t.id === currentTrack.id);
-    let nextIdx;
-    nextIdx = (currentIdx + 1) % queue.length;
-    await _loadAndPlay(queue[nextIdx]);
-  }, [queue, currentTrack, isShuffled]);
+    const q = queueRef.current;
+    const current = currentTrackRef.current;
+    if (!q.length || !current) return;
+    const currentIdx = q.findIndex(t => t.id === current.id);
+    const nextIdx = (currentIdx + 1) % q.length;
+    await _loadAndPlay(q[nextIdx]);
+  }, [_loadAndPlay]);
 
-  useEffect(() => {
-    nextTrackRef.current = nextTrack;
-  }, [nextTrack]);
+  useEffect(() => { nextTrackRef.current = nextTrack; }, [nextTrack]);
 
   const prevTrack = useCallback(async () => {
-    if (!queue.length || !currentTrack) return;
-    // If more than 3s in, restart current track instead of going back
+    const q = queueRef.current;
+    const current = currentTrackRef.current;
+    if (!q.length || !current) return;
     if (audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       setProgress(0);
       setCurrentTime(0);
       return;
     }
-    const currentIdx = queue.findIndex(t => t.id === currentTrack.id);
-    const prevIdx = (currentIdx - 1 + queue.length) % queue.length;
-    await _loadAndPlay(queue[prevIdx]);
-  }, [queue, currentTrack]);
+    const currentIdx = q.findIndex(t => t.id === current.id);
+    const prevIdx = (currentIdx - 1 + q.length) % q.length;
+    await _loadAndPlay(q[prevIdx]);
+  }, [_loadAndPlay]);
 
-  const togglePlay = () => {
-    if (!currentTrack) return;
-    if (isPlaying) { audioRef.current.pause(); } else { audioRef.current.play(); }
-    setIsPlaying(prev => !prev);
-  };
+  const togglePlay = useCallback(() => {
+    if (!currentTrackRef.current) return;
+    if (audioRef.current.paused) {
+      audioRef.current.play().catch(e => { if (e.name !== 'AbortError') console.error(e); });
+      setIsPlaying(true);
+    } else {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, []);
 
-  const toggleShuffle = () => {
+  const toggleShuffle = useCallback(() => {
     setIsShuffled(prev => {
       const next = !prev;
       if (next) {
-        if (queue.length > 1) {
-          const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
-          const copy = [...queue];
+        const q = queueRef.current;
+        const current = currentTrackRef.current;
+        if (q.length > 1) {
+          const currentIdx = current ? q.findIndex(t => t.id === current.id) : -1;
+          const copy = [...q];
           let activeTrack = null;
-          if (currentIdx !== -1) {
-            activeTrack = copy.splice(currentIdx, 1)[0];
-          }
+          if (currentIdx !== -1) activeTrack = copy.splice(currentIdx, 1)[0];
           for (let i = copy.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [copy[i], copy[j]] = [copy[j], copy[i]];
           }
-          const shuffled = activeTrack ? [activeTrack, ...copy] : copy;
-          setQueue(shuffled);
+          setQueue(activeTrack ? [activeTrack, ...copy] : copy);
         }
       } else {
-        setQueue(originalQueue);
+        setQueue(originalQueueRef.current);
       }
       return next;
     });
-  };
-  const addToQueue = (track) => {
+  }, []);
+
+  const addToQueue = useCallback((track) => {
     setQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
     setOriginalQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
-  };
+  }, []);
 
-  const toggleRepeat  = () => setIsRepeating(prev => !prev);
+  const toggleRepeat = useCallback(() => setIsRepeating(prev => !prev), []);
 
-  const updateVolume = (newVolume) => {
+  const updateVolume = useCallback((newVolume) => {
     const v = Math.max(0, Math.min(1, newVolume));
     setVolume(v);
+    volumeRef.current = v;
     audioRef.current.volume = v;
-    localStorage.setItem('drivemusic_volume', v);
-  };
+    localStorage.setItem('drivemusic_volume', String(v));
+  }, []);
 
-  const toggleMute = () => {
-    if (volume > 0) {
-      setPrevVolume(volume);
+  const toggleMute = useCallback(() => {
+    if (volumeRef.current > 0) {
+      setPrevVolume(volumeRef.current);
       updateVolume(0);
     } else {
       updateVolume(prevVolume || 1.0);
     }
-  };
+  }, [prevVolume, updateVolume]);
 
-  const seek = (newProgress) => {
+  const seek = useCallback((newProgress) => {
     if (!audioRef.current.duration) return;
-    const time = newProgress * duration;
+    const time = newProgress * audioRef.current.duration;
     audioRef.current.currentTime = time;
     setProgress(newProgress);
     setCurrentTime(time);
-  };
+  }, []);
 
   return (
     <AudioPlayerContext.Provider value={{
@@ -400,6 +424,7 @@ export const AudioPlayerProvider = ({ children }) => {
       sleepTimeLeft, startSleepTimer, clearSleepTimer,
       playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
       updateVolume, toggleMute, seek, setQueue: setQueueList, addToQueue,
+      setProgress, setCurrentTime
     }}>
       {children}
     </AudioPlayerContext.Provider>

@@ -63,20 +63,18 @@ export async function fetchDriveLibrary(accessToken) {
   // 3. Fetch folder names (batch as OR query)
   let folderMap = {};
   if (folderIds.length > 0) {
-    const folderQuery = folderIds.map(id => `'${id}' in parents or id='${id}'`).join(' or ');
-    // Simpler: fetch each folder by its ID
-    const folderResults = await Promise.allSettled(
-      folderIds.map(id =>
-        axios.get(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name`, {
+    for (const id of folderIds) {
+      try {
+        const { data } = await axios.get(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name`, {
           headers: { Authorization: `Bearer ${accessToken}` }
-        }).then(r => r.data)
-      )
-    );
-    folderResults.forEach(result => {
-      if (result.status === 'fulfilled' && result.value?.id) {
-        folderMap[result.value.id] = result.value.name;
+        });
+        if (data?.id) {
+          folderMap[data.id] = data.name;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch folder metadata for ${id}`, error.message);
       }
-    });
+    }
   }
 
   // 4. Build track list, applying the < 1 min filter
@@ -115,6 +113,7 @@ export async function fetchDriveLibrary(accessToken) {
       format: ext,
       duration: durationStr,
       durationMs: durationMs || 0,
+      size: file.size,
       folderId,
       folderName,
       url: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
