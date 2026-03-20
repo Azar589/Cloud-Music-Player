@@ -373,7 +373,7 @@ export default {
 
       const rangeHeader = request.headers.get('Range');
       const streamHeaders = new Headers(CORS);
-      streamHeaders.set('Cache-Control', 'public, max-age=31536000');
+      streamHeaders.set('Cache-Control', 'public, max-age=60, must-revalidate');
       streamHeaders.set('Accept-Ranges', 'bytes');
       streamHeaders.set('Content-Type', getMimeType(key));
 
