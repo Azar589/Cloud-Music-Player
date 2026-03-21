@@ -554,6 +554,14 @@
   border-bottom-left-radius: 4px;
 }
 
+.queue-item-cover {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .queue-item-idx {
   font-size: 0.75rem;
   font-weight: 500;
@@ -582,7 +590,7 @@
 }
 
 .queue-item-active .queue-item-title {
-  color: #ff0055;
+  color: #8b3dff;
 }
 
 .queue-item-artist {

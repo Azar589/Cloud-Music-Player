@@ -43,6 +43,8 @@ const NowPlayingPanel = ({ onClose }) => {
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
   const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
+  const userAddedTracks = nextUpTracks.filter(t => t.isUserAdded);
+  const regularNextUp = nextUpTracks.filter(t => !t.isUserAdded);
 
   const handleDragStart = (e, idx) => {
     setDraggedIdx(idx);
@@ -347,28 +349,27 @@ const NowPlayingPanel = ({ onClose }) => {
                 <div className="queue-popup-list">
                   {currentTrack && (
                     <div className="queue-item queue-item-active now-playing-row">
-                      <span className="queue-item-idx"><FaPlay style={{ fontSize: '0.6rem' }} /></span>
+                      <img src={coverSrc} alt={currentTrack.title} className="queue-item-cover" />
                       <div className="queue-item-info">
                         <div className="queue-item-title ellipsis">{currentTrack.title}</div>
                         <div className="queue-item-artist ellipsis">{currentTrack.artist || 'Unknown Artist'}</div>
                       </div>
                     </div>
                   )}
-                  {nextUpTracks.length > 0 && (
-                    <div className="queue-sec-hdr">Next Up</div>
-                  )}
-                  {nextUpTracks
-                    .map((t, idx) => (
+                  {userAddedTracks.map((t, idx) => {
+                    const absoluteIdx = nextUpTracks.indexOf(t);
+                    const trackCover = t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? t.coverUrl : logo;
+                    return (
                       <div
                         key={t.id}
                         className="queue-item draggable"
                         onClick={() => { playTrack(t); setShowQueue(false); }}
                         draggable
-                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragStart={(e) => handleDragStart(e, absoluteIdx)}
                         onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, idx)}
+                        onDrop={(e) => handleDrop(e, absoluteIdx)}
                       >
-                        <span className="queue-item-idx">{idx + 1}</span>
+                        <img src={trackCover} alt={t.title} className="queue-item-cover" />
                         <div className="queue-item-info">
                           <div className="queue-item-title ellipsis">{t.title}</div>
                           <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
@@ -377,7 +378,33 @@ const NowPlayingPanel = ({ onClose }) => {
                           <FaBars />
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {regularNextUp.map((t, idx) => {
+                    const absoluteIdx = nextUpTracks.indexOf(t);
+                    const trackCover = t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? t.coverUrl : logo;
+                    return (
+                      <div
+                        key={t.id}
+                        className="queue-item draggable"
+                        onClick={() => { playTrack(t); setShowQueue(false); }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, absoluteIdx)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, absoluteIdx)}
+                      >
+                        <img src={trackCover} alt={t.title} className="queue-item-cover" />
+                        <div className="queue-item-info">
+                          <div className="queue-item-title ellipsis">{t.title}</div>
+                          <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
+                        </div>
+                        <div className="queue-drag-handle" title="Drag to reorder">
+                          <FaBars />
+                        </div>
+                      </div>
+                    );
+                  })}
                   {queue.length === 0 && <div className="queue-empty">Your queue is empty.</div>}
                 </div>
               </div>

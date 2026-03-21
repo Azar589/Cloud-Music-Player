@@ -239,7 +239,11 @@ const Player = () => {
               <div className="queue-popup-list">
                 {currentTrack && (
                   <div className="queue-item queue-item-active now-playing-row">
-                    <span className="queue-item-idx"><FaPlay style={{ fontSize: '0.6rem' }} /></span>
+                    <img 
+                      src={currentTrack.coverUrl && !currentTrack.coverUrl.includes('images.unsplash.com') ? currentTrack.coverUrl : logo} 
+                      alt={currentTrack.title} 
+                      className="queue-item-cover" 
+                    />
                     <div className="queue-item-info">
                       <div className="queue-item-title ellipsis">{currentTrack.title}</div>
                       <div className="queue-item-artist ellipsis">{currentTrack.artist || 'Unknown Artist'}</div>
@@ -249,32 +253,58 @@ const Player = () => {
                 {(() => {
                   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
                   const nextUp = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
-                  if (nextUp.length > 0 && currentTrack) {
-                    return <div className="queue-sec-hdr">Next Up</div>;
-                  }
-                })()}
-                {(() => {
-                  const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
-                  const nextUp = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
-                  return nextUp.map((t, idx) => (
-                    // FIX: stable key — don't mix id with idx
-                    <div
-                      key={t.id}
-                      className="queue-item draggable"
-                      onClick={() => { playTrack(t); setShowQueue(false); }}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, idx)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, idx)}
-                    >
-                      <span className="queue-item-idx">{idx + 1}</span>
-                      <div className="queue-item-info">
-                        <div className="queue-item-title ellipsis">{t.title}</div>
-                        <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
-                      </div>
-                      <div className="queue-drag-handle" title="Drag to reorder"><FaBars /></div>
-                    </div>
-                  ));
+                  const userAddedTracks = nextUp.filter(t => t.isUserAdded);
+                  const regularNextUp = nextUp.filter(t => !t.isUserAdded);
+                  
+                  return (
+                    <>
+                      {userAddedTracks.map((t) => {
+                        const absoluteIdx = nextUp.indexOf(t);
+                        const trackCover = t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? t.coverUrl : logo;
+                        return (
+                          <div
+                            key={t.id}
+                            className="queue-item draggable"
+                            onClick={() => { playTrack(t); setShowQueue(false); }}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, absoluteIdx)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, absoluteIdx)}
+                          >
+                            <img src={trackCover} alt={t.title} className="queue-item-cover" />
+                            <div className="queue-item-info">
+                              <div className="queue-item-title ellipsis">{t.title}</div>
+                              <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
+                            </div>
+                            <div className="queue-drag-handle" title="Drag to reorder"><FaBars /></div>
+                          </div>
+                        );
+                      })}
+                      
+                      {regularNextUp.map((t) => {
+                        const absoluteIdx = nextUp.indexOf(t);
+                        const trackCover = t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? t.coverUrl : logo;
+                        return (
+                          <div
+                            key={t.id}
+                            className="queue-item draggable"
+                            onClick={() => { playTrack(t); setShowQueue(false); }}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, absoluteIdx)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, absoluteIdx)}
+                          >
+                            <img src={trackCover} alt={t.title} className="queue-item-cover" />
+                            <div className="queue-item-info">
+                              <div className="queue-item-title ellipsis">{t.title}</div>
+                              <div className="queue-item-artist ellipsis">{t.artist || 'Unknown Artist'}</div>
+                            </div>
+                            <div className="queue-drag-handle" title="Drag to reorder"><FaBars /></div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
                 })()}
                 {queue.length === 0 && <div className="queue-empty">Your queue is empty.</div>}
               </div>

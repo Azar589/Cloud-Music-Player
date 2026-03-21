@@ -373,15 +373,24 @@ export const AudioPlayerProvider = ({ children }) => {
         const q = queueRef.current;
         const current = currentTrackRef.current;
         if (q.length > 1) {
-          const currentIdx = current ? q.findIndex(t => t.id === current.id) : -1;
-          const copy = [...q];
+          const userItems = q.filter(t => t.isUserAdded);
+          const regular = q.filter(t => !t.isUserAdded);
+          
+          const copy = [...regular];
           let activeTrack = null;
-          if (currentIdx !== -1) activeTrack = copy.splice(currentIdx, 1)[0];
+          const activeIdxInRegular = current ? copy.findIndex(t => t.id === current.id) : -1;
+          
+          if (activeIdxInRegular !== -1) activeTrack = copy.splice(activeIdxInRegular, 1)[0];
+          
           for (let i = copy.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [copy[i], copy[j]] = [copy[j], copy[i]];
           }
-          setQueue(activeTrack ? [activeTrack, ...copy] : copy);
+          
+          const shuffledRegular = activeTrack ? [activeTrack, ...copy] : copy;
+          shuffledRegular.splice(activeTrack ? 1 : 0, 0, ...userItems);
+          
+          setQueue(shuffledRegular);
         }
       } else {
         setQueue(originalQueueRef.current);
@@ -391,8 +400,28 @@ export const AudioPlayerProvider = ({ children }) => {
   }, []);
 
   const addToQueue = useCallback((track) => {
-    setQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
-    setOriginalQueue(prev => prev.some(t => t.id === track.id) ? prev : [...prev, track]);
+    if (track.id === currentTrackRef.current?.id) return;
+    
+    const trackWithFlag = { ...track, isUserAdded: true };
+
+    const insertIntoQueue = (prev) => {
+      const filtered = prev.filter(t => t.id !== track.id);
+      const currentIdx = filtered.findIndex(t => t.id === currentTrackRef.current?.id);
+      
+      if (currentIdx !== -1) {
+        let insertIdx = currentIdx + 1;
+        while (insertIdx < filtered.length && filtered[insertIdx].isUserAdded) {
+          insertIdx++;
+        }
+        const next = [...filtered];
+        next.splice(insertIdx, 0, trackWithFlag);
+        return next;
+      }
+      return [...filtered, trackWithFlag];
+    };
+
+    setQueue(insertIntoQueue);
+    setOriginalQueue(insertIntoQueue);
   }, []);
 
   const toggleRepeat = useCallback(() => setIsRepeating(prev => !prev), []);
