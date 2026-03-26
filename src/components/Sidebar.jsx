@@ -54,15 +54,17 @@ const Sidebar = () => {
   };
 
   return (
-    <nav className={`sidebar ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+    <>
+      <div 
+        className={`sidebar-overlay ${mobileNavOpen ? 'overlay-active' : ''}`} 
+        onClick={() => setMobileNavOpen(false)} 
+      />
+      <nav className={`sidebar ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
 
       {/* Logo */}
       <div className="sidebar-logo">
         <img src={logo} alt="Cloud Music" className="sidebar-logo-img" />
         <span>Cloud Music</span>
-        <button className="sidebar-close-btn" onClick={() => setMobileNavOpen(false)} title="Close menu">
-          <FaTimes />
-        </button>
       </div>
 
       {/* Search — FIX: wired up with value + onChange */}
@@ -172,6 +174,7 @@ const Sidebar = () => {
         <button className="sidebar-logout" onClick={logout} title="Sign out"><FaSignOutAlt /></button>
       </div>
     </nav>
+    </>
   );
 };
 

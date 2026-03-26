@@ -31,6 +31,7 @@ export const AudioPlayerProvider = ({ children }) => {
   });
   const [isDownloading, setIsDownloading] = useState(false);
   const [sleepTimeLeft, setSleepTimeLeft] = useState(null);
+  const [playbackContext, setPlaybackContext] = useState({ type: 'ALL SONGS', name: 'Music Library' });
 
   // ── Stable refs so callbacks never capture stale state ─────────────────
   const volumeRef = useRef(volume);
@@ -84,9 +85,10 @@ export const AudioPlayerProvider = ({ children }) => {
   }, [queue]);
 
   // ── Expose a combined setter that also updates originalQueue ────────────
-  const setQueueList = (newList) => {
+  const setQueueList = (newList, context) => {
     setQueue(newList);
     setOriginalQueue(newList);
+    if (context) setPlaybackContext(context);
   };
 
   // ── Sleep Timer ─────────────────────────────────────────────────────────
@@ -322,8 +324,9 @@ export const AudioPlayerProvider = ({ children }) => {
   // FIX 3: removed `audio.src = 'about:blank'` unlock hack — it was the root
   // cause of MEDIA_ELEMENT_ERROR / DEMUXER_ERROR_COULD_NOT_OPEN spam.
   // R2 stream URLs are assigned directly, so no unlock trick is needed.
-  const playTrack = useCallback(async (track) => {
+  const playTrack = useCallback(async (track, context) => {
     if (currentTrackRef.current?.id === track.id) { togglePlay(); return; }
+    if (context) setPlaybackContext(context);
     await _loadAndPlay(track);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_loadAndPlay]);
@@ -455,7 +458,7 @@ export const AudioPlayerProvider = ({ children }) => {
     <AudioPlayerContext.Provider value={{
       isPlaying, isDownloading, currentTrack, volume, progress, currentTime, duration,
       isShuffled, isRepeating, queue, recentlyPlayed,
-      sleepTimeLeft, startSleepTimer, clearSleepTimer,
+      sleepTimeLeft, playbackContext, startSleepTimer, clearSleepTimer,
       playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
       updateVolume, toggleMute, seek, setQueue: setQueueList, addToQueue,
       setProgress, setCurrentTime

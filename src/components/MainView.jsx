@@ -10,10 +10,11 @@ import Player from './Player';
 import NowPlayingPanel from './NowPlayingPanel';
 import logo from '../assets/logo.png';
 import { MdPlaylistAdd } from 'react-icons/md';
+import { BiSearchAlt } from 'react-icons/bi';
 import './MainView.css';
 
 // ── Track Table ──────────────────────────────────────────────────────────────
-const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
+const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = null }) => {
   const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
   const { removeFromPlaylist } = usePlaylists();
   const [hoveredRow, setHoveredRow] = useState(null);
@@ -45,7 +46,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null }) => {
               className={`track-row ${isActive ? 'row-active' : ''}`}
               onClick={() => {
                 if (isActive) togglePlay();
-                else { setQueue(tracks); playTrack(track); }
+                else { setQueue(tracks, context); playTrack(track, context); }
               }}
               onMouseEnter={() => setHoveredRow(track.id)}
               onMouseLeave={() => setHoveredRow(null)}
@@ -127,24 +128,39 @@ const MainView = () => {
     isLoading, loadError, allTracks, folders, artistMap,
     activeView, viewParam, navigate, goBack, canGoBack,
     showNowPlaying, setShowNowPlaying, setMobileNavOpen,
-    searchQuery, searchResults,
+    searchQuery, setSearchQuery, searchResults,
   } = useApp();
   const { playlists } = usePlaylists();
+
+  const getDisplayTitle = () => {
+    switch (activeView) {
+      case 'home': return 'Home';
+      case 'songs': return 'All Songs';
+      case 'artists': return 'Artists';
+      case 'search': return 'Search';
+      case 'folder': return viewParam || 'Folder';
+      case 'artist-detail': return viewParam || 'Artist';
+      case 'playlist-detail':
+        const pl = playlists.find(p => p.id === viewParam);
+        return pl ? pl.name : 'Playlist';
+      default: return 'Cloud Music';
+    }
+  };
 
   // FIX: removed unused HERO_BG constant and unused recentCardSize state
 
   const renderHome = () => (
     <>
-      <div className="playlist-title-row" style={{ marginTop: 24 }}>
+      <div className="playlist-title-row main-page-title" style={{ marginTop: 24 }}>
         <h2 className="playlist-title">Home</h2>
       </div>
 
       {recentlyPlayed.length > 0 && (
         <div className="recent-section">
-          <div className="playlist-title-row"><h3 className="section-subtitle">Recently Played</h3></div>
+          <div className="playlist-title-row"><h2 className="playlist-title">Recent Songs</h2></div>
           <div className="recent-grid">
             {recentlyPlayed.map(t => (
-              <div key={t.id} className="recent-card" onClick={() => { setQueue([t]); playTrack(t); }}>
+              <div key={t.id} className="recent-card" onClick={() => { setQueue([t], { type: 'RECENTLY PLAYED', name: '' }); playTrack(t, { type: 'RECENTLY PLAYED', name: '' }); }}>
                 <div className="recent-cover-wrap">
                   {t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? (
                     <img src={t.coverUrl} alt={t.title} className="recent-cover" />
@@ -162,7 +178,7 @@ const MainView = () => {
         </div>
       )}
 
-      <div className="playlist-title-row" style={{ marginTop: 32 }}><h2 className="playlist-title">Folders</h2></div>
+      <div className="playlist-title-row" style={{ marginTop: 24 }}><h2 className="playlist-title">Folders</h2></div>
       <div className="folder-grid">
         {folders.map(f => (
           <div key={f.id} className="folder-card" onClick={() => navigate('folder', f.id)}>
@@ -182,8 +198,8 @@ const MainView = () => {
 
   const renderSongs = () => (
     <>
-      <div className="playlist-title-row"><h2 className="playlist-title">All Songs</h2></div>
-      <TrackTable tracks={allTracks} />
+      <div className="playlist-title-row main-page-title"><h2 className="playlist-title">All Songs</h2></div>
+      <TrackTable tracks={allTracks} context={{ type: 'PLAYLIST', name: 'All Songs' }} />
     </>
   );
 
@@ -191,7 +207,7 @@ const MainView = () => {
     const artists = Object.keys(artistMap).sort();
     return (
       <>
-        <div className="playlist-title-row"><h2 className="playlist-title">Artists</h2></div>
+        <div className="playlist-title-row main-page-title"><h2 className="playlist-title">Artists</h2></div>
         <div className="folder-grid">
           {artists.map(name => (
             <div key={name} className="folder-card" onClick={() => navigate('artist-detail', name)}>
@@ -214,11 +230,11 @@ const MainView = () => {
     const tracks = allTracks.filter(t => t.folderId === viewParam);
     return (
       <>
-        <div className="playlist-title-row">
+        <div className="playlist-title-row main-page-title">
           <h2 className="playlist-title">{folder?.name || 'Folder'}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
-        <TrackTable tracks={tracks} />
+        <TrackTable tracks={tracks} context={{ type: 'FOLDER', name: folder?.name || 'Unknown Folder' }} />
       </>
     );
   };
@@ -227,11 +243,11 @@ const MainView = () => {
     const tracks = artistMap[viewParam] || [];
     return (
       <>
-        <div className="playlist-title-row">
+        <div className="playlist-title-row main-page-title">
           <h2 className="playlist-title">{viewParam}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
-        <TrackTable tracks={tracks} />
+        <TrackTable tracks={tracks} context={{ type: 'ARTIST', name: viewParam }} />
       </>
     );
   };
@@ -242,30 +258,31 @@ const MainView = () => {
     const tracks = playlist.trackIds.map(id => allTracks.find(t => t.id === id)).filter(Boolean);
     return (
       <>
-        <div className="playlist-title-row">
+        <div className="playlist-title-row main-page-title">
           <h2 className="playlist-title">{playlist.name}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
-        <TrackTable tracks={tracks} playlistId={playlist.id} />
+        <TrackTable tracks={tracks} playlistId={playlist.id} context={{ type: 'PLAYLIST', name: playlist.name }} />
       </>
     );
   };
 
   // FIX: new search results view
   const renderSearch = () => (
-    <>
-      <div className="playlist-title-row">
+    <div className="search-view">
+      <div className="playlist-title-row main-page-title">
         <h2 className="playlist-title">
           <FaSearch style={{ marginRight: 10, fontSize: '1.2rem', opacity: 0.6 }} />
           "{searchQuery}"
         </h2>
         <span className="subtitle-count">{searchResults.length} results</span>
       </div>
+
       {searchResults.length === 0
         ? <p className="track-empty">No tracks match your search.</p>
-        : <TrackTable tracks={searchResults} />
+        : <TrackTable tracks={searchResults} context={{ type: 'SEARCH RESULTS', name: searchQuery }} />
       }
-    </>
+    </div>
   );
 
   return (
@@ -278,7 +295,7 @@ const MainView = () => {
         <button className="mobile-menu-btn" onClick={() => setMobileNavOpen(true)} title="Menu">
           <FaBars />
         </button>
-        <span className="mobile-logo-text">Cloud Music Player</span>
+        <span className="mobile-logo-text">{getDisplayTitle()}</span>
 
         {canGoBack && (
           <button className="nav-arrow-btn" onClick={goBack} title="Go back">
@@ -297,15 +314,34 @@ const MainView = () => {
         ) : loadError ? (
           <p className="track-error">⚠ {loadError}</p>
         ) : (
-          <>
-            {activeView === 'home' && renderHome()}
+          <div className="mv-content">
+        {/* Persistent Mobile Search Bar to prevent focus loss during view transitions */}
+        <div className="home-search-mobile">
+          <BiSearchAlt className="hs-icon" />
+          <input
+            type="text"
+            placeholder="Search tracks, artists..."
+            value={searchQuery}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              if (val.trim()) {
+                if (activeView !== 'search') navigate('search', null);
+              } else {
+                if (activeView !== 'home') navigate('home', null, true);
+              }
+            }}
+          />
+        </div>
+
+        {activeView === 'home' && renderHome()}
             {activeView === 'songs' && renderSongs()}
             {activeView === 'artists' && renderArtists()}
             {activeView === 'folder' && renderFolderDetail()}
             {activeView === 'artist-detail' && renderArtistDetail()}
             {activeView === 'playlist-detail' && renderPlaylistDetail()}
             {activeView === 'search' && renderSearch()}
-          </>
+          </div>
         )}
       </div>
 

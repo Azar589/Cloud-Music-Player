@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import {
   FaPlay, FaPause, FaStepBackward, FaStepForward,
   FaRandom, FaRedoAlt, FaVolumeUp, FaVolumeMute, FaListUl,
-  FaTimes, FaBars, FaMoon, FaEllipsisV
+  FaChevronDown, FaBars, FaMoon, FaEllipsisV
 } from 'react-icons/fa';
 import logo from '../assets/logo.png';
 import './NowPlayingPanel.css';
@@ -26,10 +26,11 @@ const formatBytes = (bytes) => {
 
 const NowPlayingPanel = ({ onClose }) => {
   const {
-    isPlaying, currentTrack, progress, currentTime, duration, volume,
-    isShuffled, isRepeating, queue, sleepTimeLeft, startSleepTimer,
-    togglePlay, toggleShuffle, toggleRepeat,
-    seek, nextTrack, prevTrack, updateVolume, toggleMute, playTrack, setQueue
+    isPlaying, isDownloading, currentTrack, volume, progress, currentTime, duration,
+    isShuffled, isRepeating, queue, recentlyPlayed,
+    sleepTimeLeft, playbackContext, startSleepTimer, clearSleepTimer,
+    playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
+    updateVolume, toggleMute, seek, setQueue, addToQueue
   } = useAudioPlayer();
 
   const { viewMode, setViewMode } = useApp();
@@ -40,6 +41,13 @@ const NowPlayingPanel = ({ onClose }) => {
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [sizeFromHead, setSizeFromHead] = useState(null);
+
+  // Swipe-to-dismiss state
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [translateY, setTranslateY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
   const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
@@ -131,6 +139,42 @@ const NowPlayingPanel = ({ onClose }) => {
     ? currentTrack.coverUrl
     : logo;
 
+  // ── Swipe to Dismiss Logic ───────────────────────────────────────────────
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientY);
+    setIsDragging(true);
+  };
+
+  const onTouchMove = (e) => {
+    const currentTouch = e.targetTouches[0].clientY;
+    const diff = currentTouch - touchStart;
+    
+    // Only allow dragging downwards
+    if (diff > 0) {
+      setTranslateY(diff);
+      setTouchEnd(currentTouch);
+    }
+  };
+
+  const onTouchEnd = () => {
+    setIsDragging(false);
+    if (!touchStart || !touchEnd) return;
+    const distance = touchEnd - touchStart;
+    const isSwipeDown = distance > 100; // threshold for closing
+
+    if (isSwipeDown) {
+      handleClose();
+    } else {
+      setTranslateY(0);
+    }
+  };
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 400); // match transition duration
+  };
+
   useEffect(() => {
     let isMounted = true;
     if (isFlipped && currentTrack?.url && !currentTrack.size && !sizeFromHead) {
@@ -149,14 +193,26 @@ const NowPlayingPanel = ({ onClose }) => {
   const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
 
   return (
-    <div className="np-overlay">
+    <div 
+      className={`np-overlay ${isDragging ? 'dragging' : ''} ${isClosing ? 'closing' : ''}`}
+      style={{ 
+        transform: `translateY(${isClosing ? '100%' : `${translateY}px`})${isDragging ? '' : ` scale(${isClosing ? 0.95 : 1})`}`,
+        transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, scale 0.5s cubic-bezier(0.19, 1, 0.22, 1)'
+      }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       {/* Top Header */}
       <div className="npp-top-header">
+        <button className="np-close-chevron" onClick={handleClose}><FaChevronDown /></button>
         <div className="npp-header-brand">
-          <img src={logo} alt="Logo" className="npp-header-logo" />
-          <span className="npp-header-text">Cloud Music Player</span>
+          <div className="npp-header-info">
+            <span className="npp-context-type">{playbackContext.type}</span>
+            <span className="npp-context-name ellipsis">{playbackContext.name}</span>
+          </div>
         </div>
-        <button className="np-close" onClick={onClose}><FaTimes /></button>
+        <div className="npp-header-spacer" /> {/* Spacer to balance the close button (40px) */}
       </div>
 
       <div className="np-panel">

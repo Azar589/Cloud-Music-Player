@@ -37,8 +37,10 @@
   transition: color var(--transition-fast);
 }
 
-.see-all-btn:hover {
-  color: var(--text-primary);
+@media (hover: hover) {
+  .see-all-btn:hover {
+    color: var(--text-primary);
+  }
 }
 
 /* Tags */
@@ -60,9 +62,11 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.tag-pill:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+@media (hover: hover) {
+  .tag-pill:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
 }
 
 /* ── Now Playing (Large Area) ── */
@@ -155,7 +159,12 @@
   transition: background var(--transition-fast);
 }
 
-.played-item:hover,
+@media (hover: hover) {
+  .played-item:hover {
+    background: var(--bg-card);
+  }
+}
+
 .played-item.played-active {
   background: var(--bg-card);
 }
@@ -189,7 +198,12 @@
   transition: opacity var(--transition-fast);
 }
 
-.played-item:hover .played-thumb-overlay,
+@media (hover: hover) {
+  .played-item:hover .played-thumb-overlay {
+    opacity: 1;
+  }
+}
+
 .played-item.played-active .played-thumb-overlay {
   opacity: 1;
 }

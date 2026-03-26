@@ -113,7 +113,11 @@ const Player = () => {
 
   return (
     <div className="player">
-      <div className="player-inner">
+      <div 
+        className="player-inner" 
+        onClick={() => currentTrack && setShowNowPlaying(true)}
+        style={{ cursor: currentTrack ? 'pointer' : 'default' }}
+      >
 
         {/* ── Left: Now Playing ── */}
         <div className="player-now-playing">
@@ -122,16 +126,13 @@ const Player = () => {
               src={currentTrack.coverUrl}
               alt={currentTrack.title}
               className="now-playing-cover"
-              onClick={() => currentTrack && setShowNowPlaying(true)}
-              style={{ cursor: currentTrack ? 'pointer' : 'default' }}
             />
           ) : (
             <img
               src={logo}
               alt="logo"
               className="now-playing-cover"
-              style={{ objectFit: 'cover', opacity: 0.8, cursor: currentTrack ? 'pointer' : 'default' }}
-              onClick={() => currentTrack && setShowNowPlaying(true)}
+              style={{ objectFit: 'cover', opacity: 0.8 }}
             />
           )}
           <div className="now-playing-text">
@@ -142,7 +143,7 @@ const Player = () => {
 
         {/* ── Center: Controls + Seekbar ── */}
         <div className="player-center">
-          <div className="player-controls">
+          <div className="player-controls" onClick={e => e.stopPropagation()}>
             <button className={`p-ctrl-btn ${isShuffled ? 'ctrl-active' : ''}`} onClick={toggleShuffle} title="Shuffle">
               <FaRandom />
             </button>
@@ -165,7 +166,7 @@ const Player = () => {
           </div>
 
           {/* Seekbar — mouse + touch */}
-          <div className="player-seekbar-row">
+          <div className="player-seekbar-row" onClick={e => e.stopPropagation()}>
             <span className="player-time">{formatTime(currentTime)}</span>
             <div
               className={`player-progress-wrap ${isDownloading ? 'loading' : ''}`}
@@ -183,7 +184,7 @@ const Player = () => {
         </div>
 
         {/* ── Right: Volume + Queue + Sleep ── */}
-        <div className="player-right">
+        <div className="player-right" onClick={e => e.stopPropagation()}>
 
           {/* Sleep Timer */}
           <div className="sleep-timer-wrap" style={{ position: 'relative' }}>
@@ -217,7 +218,7 @@ const Player = () => {
           </button>
 
           {/* Volume — mouse + touch */}
-          <div className="volume-wrapper">
+          <div className="volume-wrapper" onClick={e => e.stopPropagation()}>
             <button className="p-icon-btn" onClick={toggleMute} title={volume === 0 ? 'Unmute' : 'Mute'}>
               {volume === 0 ? <FaVolumeMute /> : <FaVolumeUp />}
             </button>

@@ -185,7 +185,10 @@ export const AppProvider = ({ children }) => {
   const navigate = (view, param = null, replace = false) => {
     setActiveView(view);
     setViewParam(param);
-    setSearchQuery(''); // clear search on navigation
+    // FIX: only clear search if NOT navigating to search view itself
+    if (view !== 'search') {
+      setSearchQuery('');
+    }
     if (replace || view === 'home') {
       setNavHistory([{ view, param }]);
     } else {
@@ -203,12 +206,52 @@ export const AppProvider = ({ children }) => {
     setViewParam(prev.param);
   };
 
+  // ── History-aware setters for panels ──────────────────────────────────
+  const toggleNowPlaying = (val) => {
+    if (val === showNowPlaying) return;
+    if (val) {
+      window.history.pushState({ panel: 'np' }, '');
+    } else {
+      // If closing manually, and we are at the state we pushed, pop it
+      if (window.history.state?.panel === 'np') {
+        window.history.back();
+      }
+    }
+    setShowNowPlaying(val);
+  };
+
+  const toggleMobileNav = (val) => {
+    if (val === mobileNavOpen) return;
+    if (val) {
+      window.history.pushState({ panel: 'nav' }, '');
+    } else {
+      if (window.history.state?.panel === 'nav') {
+        window.history.back();
+      }
+    }
+    setMobileNavOpen(val);
+  };
+
+  // ── History API for Back Gesture (Sidebar & NP Panel) ──────────────────
+  useEffect(() => {
+    const handlePopState = (e) => {
+      // Close panels if they are open when back gesture is used
+      // We don't call toggleNowPlaying/toggleMobileNav here because we don't 
+      // want to call history.back() again (it's already been popped).
+      if (mobileNavOpen) setMobileNavOpen(false);
+      if (showNowPlaying) setShowNowPlaying(false);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [mobileNavOpen, showNowPlaying]);
+
   return (
     <AppContext.Provider value={{
       allTracks, folders, artistMap, isLoading, loadError,
       activeView, viewParam, navigate, goBack, canGoBack: navHistory.length > 1,
-      showNowPlaying, setShowNowPlaying,
-      mobileNavOpen, setMobileNavOpen,
+      showNowPlaying, setShowNowPlaying: toggleNowPlaying,
+      mobileNavOpen, setMobileNavOpen: toggleMobileNav,
       viewMode, setViewMode,
       searchQuery, setSearchQuery,
       searchResults,

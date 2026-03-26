@@ -15,7 +15,6 @@
   display: flex;
   align-items: center;
   padding: 16px 20px 8px;
-  flex-shrink: 0;
 }
 
 .mv-nav-arrows {
@@ -37,9 +36,11 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.nav-arrow-btn:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+@media (hover: hover) {
+  .nav-arrow-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
 }
 
 .mv-spacer {
@@ -75,9 +76,56 @@
   display: flex;
   gap: 16px;
   overflow-x: auto;
-  padding: 8px 4px;
+  padding: 8px 32px;
+  margin: 0 -32px;
   scrollbar-width: none;
   /* Hide scrollbar for clean look */
+}
+
+@media (max-width: 768px) {
+  .recent-grid {
+    padding: 8px 16px;
+    margin: 0 -16px;
+  }
+}
+
+/* ── Mobile Search at Top of Home ── */
+.home-search-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .home-search-mobile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    transition: background 0.2s;
+    position: relative;
+  }
+
+  .home-search-mobile:focus-within {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .home-search-mobile input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-size: 1rem;
+  }
+
+  .hs-icon {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 1.2rem;
+  }
 }
 
 .recent-grid::-webkit-scrollbar {
@@ -91,8 +139,10 @@
   transition: transform 0.2s ease;
 }
 
-.recent-card:hover {
-  transform: translateY(-4px);
+@media (hover: hover) {
+  .recent-card:hover {
+    transform: translateY(-4px);
+  }
 }
 
 .recent-cover-wrap {
@@ -157,9 +207,11 @@
   transition: transform var(--transition-bounce), background var(--transition-fast);
 }
 
-.folder-card:hover {
-  transform: translateY(-2px);
-  background: var(--bg-elevated);
+@media (hover: hover) {
+  .folder-card:hover {
+    transform: translateY(-2px);
+    background: var(--bg-elevated);
+  }
 }
 
 .folder-icon {
@@ -227,8 +279,10 @@
   transition: color var(--transition-fast);
 }
 
-.more-btn:hover {
-  color: var(--text-primary);
+@media (hover: hover) {
+  .more-btn:hover {
+    color: var(--text-primary);
+  }
 }
 
 /* ── Hero Card ── */
@@ -299,9 +353,11 @@
   transition: transform var(--transition-bounce), background var(--transition-fast);
 }
 
-.hero-play-btn:hover {
-  transform: scale(1.04);
-  background: var(--accent-hover);
+@media (hover: hover) {
+  .hero-play-btn:hover {
+    transform: scale(1.04);
+    background: var(--accent-hover);
+  }
 }
 
 .hero-follow-btn {
@@ -316,8 +372,10 @@
   backdrop-filter: blur(8px);
 }
 
-.hero-follow-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+@media (hover: hover) {
+  .hero-follow-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
 }
 
 /* ── Track Table ── */
@@ -410,8 +468,10 @@
   border-radius: 8px;
 }
 
-.track-row:hover {
-  background: var(--bg-card);
+@media (hover: hover) {
+  .track-row:hover {
+    background: var(--bg-card);
+  }
 }
 
 .track-row.row-active {
@@ -436,8 +496,10 @@
   transition: color var(--transition-fast);
 }
 
-.td-add-queue:hover {
-  color: var(--text-primary);
+@media (hover: hover) {
+  .td-add-queue:hover {
+    color: var(--text-primary);
+  }
 }
 
 .td-num {
@@ -621,7 +683,7 @@
   display: none;
   /* Hide Desktop */
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 1.25rem;
   color: #ffffff;
   letter-spacing: -0.1px;
   align-items: center;
@@ -637,8 +699,23 @@
   }
 
   .mv-topbar {
-    padding: 18px 16px;
-    /* Tighter padding */
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 16px 12px;
+    /* Tighter padding but deeper */
+  }
+
+  /* Hide redundant titles on mobile now that they are in the top bar */
+  .main-page-title {
+    display: none !important;
+  }
+
+  .playlist-title-row:not(.main-page-title) {
+    display: flex !important;
+    margin-bottom: 16px;
+  }
+
+  .playlist-title {
+    font-size: 1.3rem;
+    font-weight: 700;
   }
 
   /* Hide quality and time columns on very narrow grids */

@@ -15,7 +15,19 @@
   /* dark semi-transparent tint */
   backdrop-filter: blur(24px) saturate(1.2);
   /* strong blur to hide text */
-  animation: np-fade-in 0.3s ease;
+  animation: np-slide-up 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  transition: opacity 0.5s ease, backdrop-filter 0.5s ease, transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.np-overlay.closing {
+  opacity: 0;
+  backdrop-filter: blur(0px) saturate(1);
+  pointer-events: none;
+}
+
+@keyframes np-slide-up {
+  from { transform: translateY(100%) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 @keyframes np-fade-in {
@@ -65,24 +77,60 @@
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
 }
 
-.npp-header-brand {
+.np-close-chevron {
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  transition: transform var(--transition-bounce), color 0.2s;
+  z-index: 10;
 }
 
-.npp-header-logo {
-  width: 50px;
-  height: 50px;
-  object-fit: contain;
-  border-radius: 12px;
+@media (hover: hover) {
+  .np-close-chevron:hover {
+    color: var(--text-primary);
+    transform: translateY(2px);
+  }
 }
 
-.npp-header-text {
-  font-weight: 800;
-  font-size: 1rem;
+.npp-header-spacer {
+  width: 40px;
+}
+
+.npp-header-brand {
+  display: flex;
+  flex: 1;
+  padding-top: 10px;
+  justify-content: center;
+  align-items: center;
+}
+
+.npp-header-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  max-width: 80%;
+}
+
+.npp-context-type {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.npp-context-name {
+  font-size: 0.96rem;
+  font-weight: 700;
   color: #ffffff;
-  letter-spacing: -0.2px;
+  width: 100%;
 }
 
 .np-close {
@@ -103,10 +151,12 @@
   pointer-events: auto;
 }
 
-.np-close:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  transform: scale(1.1);
+@media (hover: hover) {
+  .np-close:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    transform: scale(1.1);
+  }
 }
 
 /* ── Vinyl Turntable ── */
@@ -483,9 +533,11 @@
   transition: all 0.2s;
 }
 
-.np-seekbar:hover .np-seekbar-handle {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+@media (hover: hover) {
+  .np-seekbar:hover .np-seekbar-handle {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 /* Controls */
@@ -505,9 +557,11 @@
   transition: all 0.2s;
 }
 
-.np-ctrl-btn:hover {
-  color: #fff;
-  transform: scale(1.1);
+@media (hover: hover) {
+  .np-ctrl-btn:hover {
+    color: #fff;
+    transform: scale(1.1);
+  }
 }
 
 .np-ctrl-btn.ctrl-active {
@@ -524,9 +578,11 @@
   transition: all 0.2s;
 }
 
-.np-skip-btn:hover {
-  color: #fff;
-  transform: scale(1.12);
+@media (hover: hover) {
+  .np-skip-btn:hover {
+    color: #fff;
+    transform: scale(1.12);
+  }
 }
 
 .np-play-wrap {
@@ -564,9 +620,11 @@
   transition: background 0.2s, transform 0.1s;
 }
 
-.np-play-btn:hover {
-  background: #7a2eee;
-  transform: scale(1.06);
+@media (hover: hover) {
+  .np-play-btn:hover {
+    background: #7a2eee;
+    transform: scale(1.06);
+  }
 }
 
 .np-play-btn:active {
@@ -604,8 +662,10 @@
   border: none;
 }
 
-.np-vol-btn:hover {
-  color: var(--text-primary);
+@media (hover: hover) {
+  .np-vol-btn:hover {
+    color: var(--text-primary);
+  }
 }
 
 .np-vol-slider {
@@ -635,26 +695,28 @@
   transition: width 0.1s linear;
 }
 
-.np-vol-slider:hover .np-vol-fill {
-  background: #8b3dff;
-  /* Accent on hover */
-}
+@media (hover: hover) {
+  .np-vol-slider:hover .np-vol-fill {
+    background: #8b3dff;
+    /* Accent on hover */
+  }
 
-.np-vol-handle {
-  position: absolute;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  background: #fff;
-  border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  opacity: 0;
-  transition: all 0.2s;
-}
+  .np-vol-handle {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    transition: all 0.2s;
+  }
 
-.np-vol-slider:hover .np-vol-handle {
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 1;
+  .np-vol-slider:hover .np-vol-handle {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 }
 
 .np-tool-btn-wrap {
@@ -677,14 +739,11 @@
   /* give slight breathing room for click */
 }
 
-.np-tool-btn:hover {
-  color: #ffffff;
-  transform: scale(1.1);
-}
-
-.np-tool-btn:hover {
-  color: var(--text-primary);
-  transform: scale(1.1);
+@media (hover: hover) {
+  .np-tool-btn:hover {
+    color: #ffffff;
+    transform: scale(1.1);
+  }
 }
 
 /* ── Squircle Cover Art ── */
@@ -776,9 +835,11 @@
   gap: 8px;
 }
 
-.more-item:hover {
-  background: rgba(139, 61, 255, 0.15);
-  color: #fff;
+@media (hover: hover) {
+  .more-item:hover {
+    background: rgba(139, 61, 255, 0.15);
+    color: #fff;
+  }
 }
 
 .more-item.item-active {
@@ -969,5 +1030,11 @@
     padding: 14px 24px !important;
     font-size: 0.95rem !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  /* Hide close button and spacer on mobile for perfect centering */
+  .np-close-chevron,
+  .npp-header-spacer {
+    display: flex !important;
   }
 }
