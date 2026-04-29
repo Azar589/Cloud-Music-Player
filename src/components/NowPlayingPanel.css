@@ -26,8 +26,15 @@
 }
 
 @keyframes np-slide-up {
-  from { transform: translateY(100%) scale(0.95); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
+  from {
+    transform: translateY(100%) scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes np-fade-in {
@@ -51,17 +58,59 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 40px;
-  z-index: 1;
-  /* Removed dark box background and borders */
+  padding: 0;
+  /* art is full-bleed; text/controls get their own padding */
+  z-index: 4;
   background: transparent;
   border: none;
   box-shadow: none;
 }
 
-/* We don't need the extra blurred bg inside the panel anymore because App.jsx handles it */
 .np-bg {
-  display: none;
+  display: block;
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(40px) saturate(1.4) brightness(0.45);
+  transform: scale(1.15);
+  /* overflow so blur edges don't show */
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Incoming track bg overlay — sits above current bg, JS controls opacity */
+.np-bg-next {
+  z-index: 1;
+  opacity: 0;
+  will-change: opacity;
+}
+
+/* Dominant color overlay — JS sets background-color and crossfades 400ms */
+.np-bg-color {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  will-change: background-color, opacity;
+}
+
+/* Dark vignette gradient — linear from transparent to black@20% at bottom */
+.np-bg-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: linear-gradient(to bottom,
+      transparent 40%,
+      rgba(0, 0, 0, 0.20) 100%);
+  pointer-events: none;
+}
+
+/* Ensure panel content renders above the backgrounds */
+.np-panel>*:not(.np-bg):not(.np-bg-next):not(.np-bg-color):not(.np-bg-vignette) {
+  position: relative;
+  z-index: 4;
 }
 
 .npp-top-header {
@@ -163,8 +212,9 @@
 .np-turntable {
   position: relative;
   margin-top: 32px;
-  width: 240px;
-  height: 240px;
+  width: calc(100% - 50px);
+  aspect-ratio: 1 / 1;
+  height: auto;
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -459,11 +509,13 @@
   box-sizing: border-box;
 }
 
-/* Track info */
+/* Track info — restore horizontal padding for text */
 .np-info {
   width: 100%;
   margin-top: 28px;
   text-align: center;
+  padding: 0 32px;
+  box-sizing: border-box;
 }
 
 .np-title {
@@ -479,13 +531,15 @@
   margin-top: 4px;
 }
 
-/* Seekbar */
+/* Seekbar — padding so it doesn't touch the edges */
 .np-seekbar-row {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   margin-top: 28px;
+  padding: 0 32px;
+  box-sizing: border-box;
 }
 
 .np-time {
@@ -515,9 +569,9 @@
 
 .np-seekbar-fill {
   height: 100%;
-  background: #8b3dff;
+  background: var(--color-primary);
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(139, 61, 255, 0.5);
+  box-shadow: 0 0 8px rgba(160, 56, 255, 0.5);
   transition: width 0.1s linear;
 }
 
@@ -540,12 +594,15 @@
   }
 }
 
-/* Controls */
+/* Controls — minimalist playback control cluster */
 .np-controls {
   display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: center;
+  gap: 32px;
   margin-top: 28px;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 
 .np-ctrl-btn {
@@ -565,8 +622,8 @@
 }
 
 .np-ctrl-btn.ctrl-active {
-  color: #8b3dff;
-  filter: drop-shadow(0 0 6px rgba(255, 0, 85, 0.4));
+  color: var(--color-primary);
+  filter: drop-shadow(0 0 6px rgba(160, 56, 255, 0.5));
 }
 
 .np-skip-btn {
@@ -597,8 +654,8 @@
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  background: #8b3dff;
-  opacity: 0.3;
+  background: var(--color-primary);
+  opacity: 0.28;
   filter: blur(10px);
   animation: pulse-glow 2.5s infinite alternate ease-in-out;
   z-index: -1;
@@ -608,7 +665,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: #8b3dff;
+  background: var(--color-primary);
   color: #fff;
   border: none;
   font-size: 1.4rem;
@@ -616,13 +673,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 20px rgba(139, 61, 255, 0.5);
-  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 6px 20px rgba(160, 56, 255, 0.5);
+  transition: background 0.15s, transform 0.1s;
 }
 
 @media (hover: hover) {
   .np-play-btn:hover {
-    background: #7a2eee;
+    background: var(--color-primary-dark);
     transform: scale(1.06);
   }
 }
@@ -689,16 +746,14 @@
   top: 0;
   left: 0;
   bottom: 0;
-  background: var(--text-primary);
-  background: #8b3dff;
+  background: var(--color-primary);
   border-radius: 2px;
   transition: width 0.1s linear;
 }
 
 @media (hover: hover) {
   .np-vol-slider:hover .np-vol-fill {
-    background: #8b3dff;
-    /* Accent on hover */
+    background: var(--color-primary-light);
   }
 
   .np-vol-handle {
@@ -746,14 +801,16 @@
   }
 }
 
-/* ── Squircle Cover Art ── */
+/* ── Squircle Cover Art — Edge-to-Edge ── */
 .np-squircle-cover-wrapper {
   margin-top: 32px;
-  width: 260px;
-  height: 260px;
-  border-radius: 20px;
+  width: 90%;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  border-radius: 24px;
+  /* squircle — Deezer spec: 24dp */
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+  box-shadow: none;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -837,30 +894,34 @@
 
 @media (hover: hover) {
   .more-item:hover {
-    background: rgba(139, 61, 255, 0.15);
+    background: var(--color-primary-transparent);
     color: #fff;
   }
 }
 
 .more-item.item-active {
-  color: #8b3dff;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
 /* ── Flip Card Effects ── */
 .np-cover-flipper {
   perspective: 1000px;
-  width: 260px;
-  height: 260px;
+  /* Same size as squircle wrapper */
+  width: calc(100% - 50px);
+  aspect-ratio: 1 / 1;
+  height: auto;
+  position: relative;
+  /* needed so absolute children resolve correctly */
   margin-top: 32px;
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .np-cover-flipper-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  /* absolute fill — avoids height:100% failing on aspect-ratio parents */
+  position: absolute;
+  inset: 0;
   text-align: center;
   transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   transform-style: preserve-3d;
@@ -877,7 +938,9 @@
   height: 100%;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  border-radius: 20px;
+  border-radius: 24px;
+  /* squircle — matches wrapper */
+  overflow: hidden;
 }
 
 .np-cover-front {
@@ -1036,5 +1099,99 @@
   .np-close-chevron,
   .npp-header-spacer {
     display: flex !important;
+  }
+}
+
+/* ── Desktop view tweaks for Now Playing ── */
+@media (min-width: 769px) {
+  .np-cover-flipper {
+    margin: 10px 0;
+    width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* ── Card-Peek Pager ── */
+.np-pager-viewport {
+  width: 100%;
+  position: relative;
+}
+
+.np-pager-rail {
+  display: flex;
+  align-items: center;
+}
+
+.np-pager-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .np-pager-viewport {
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+
+  .np-pager-rail {
+    flex-direction: row;
+    gap: 16px;
+    will-change: transform;
+  }
+
+  .np-pager-card {
+    /* Mobile spec: large cards with side peek */
+    flex: 0 0 85%;
+    width: 85%;
+    min-width: 0;
+    will-change: transform, opacity;
+  }
+
+  .np-pager-card .np-squircle-cover-wrapper,
+  .np-pager-card .np-cover-flipper {
+    width: 100%;
+  }
+
+  /* Side peek cards — flat, no elevation */
+  .np-pager-card:first-child .np-squircle-cover-wrapper,
+  .np-pager-card:last-child .np-squircle-cover-wrapper {
+    box-shadow: none;
+  }
+}
+
+.np-pager-card-empty {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* On desktop: collapse to normal single-card, no peeking or carousel behavior */
+@media (min-width: 769px) {
+  .np-pager-viewport {
+    overflow: visible;
+    margin-top: 75px;
+    margin-bottom: -15px;
+  }
+
+  .np-pager-rail {
+    justify-content: center;
+  }
+
+  .np-pager-card {
+    display: none;
+    width: auto;
+  }
+
+  .np-pager-card:nth-child(2) {
+    display: flex;
+  }
+
+  /* Override the 100% width from mobile to restore normal desktop sizing */
+  .np-pager-card .np-squircle-cover-wrapper,
+  .np-pager-card .np-cover-flipper {
+    width: 320px;
+    /* Constrained size for desktop */
+    margin: 10px auto;
   }
 }

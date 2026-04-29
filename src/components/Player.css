@@ -1,136 +1,117 @@
-/* ── Modern Premium Music Player ── */
+/* ── Modern Premium Music Player — Top Seekbar Design ── */
 .player {
   flex-shrink: 0;
-  background: rgba(18, 18, 22, 0.7);
-  backdrop-filter: blur(50px) saturate(150%);
-  -webkit-backdrop-filter: blur(50px) saturate(150%);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 18, 18, 0.85);
+  backdrop-filter: blur(50px) saturate(180%);
+  -webkit-backdrop-filter: blur(50px) saturate(180%);
+  box-shadow: var(--shadow-player);
   display: flex;
   flex-direction: column;
   z-index: 100;
   position: relative;
 }
 
-/* ── 1. Center Seekbar Row ── */
-.player-seekbar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  max-width: 460px;
-  /* Optimal width for center flow */
-  margin-top: 4px;
-}
-
+/* ── 1. Top Seekbar ── */
 .player-time {
   font-size: 0.75rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   min-width: 36px;
+  text-align: center;
 }
 
-.player-progress-wrap {
-  flex: 1;
-  height: 4px;
-  position: relative;
+.player-top-seekbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-  transition: height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  z-index: 10;
+  transition: height 0.15s ease, transform 0.15s ease;
+  transform-origin: top;
   display: flex;
   align-items: center;
 }
 
 @media (hover: hover) {
-  .player-progress-wrap:hover {
-    height: 6px;
-    /* Smooth expand */
+  .player-top-seekbar:hover {
+    height: 8px;
+    transform: translateY(-6px);
   }
 }
 
-.player-progress-bg {
+.player-top-seekbar.loading .player-progress-bg::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(160, 56, 255, 0.35), transparent);
+  animation: buffer-slide 1.2s infinite linear;
+}
+
+@keyframes buffer-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.player-top-seekbar .player-progress-bg {
   height: 100%;
   width: 100%;
   position: relative;
 }
 
-/* Loading Animation */
-.player-progress-wrap.loading .player-progress-bg::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(147, 51, 234, 0.3), transparent);
-  animation: buffer-slide 1.2s infinite linear;
-}
-
-@keyframes buffer-slide {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-/* Solid Purple Fill aligned to screenshot */
-.player-progress-fill {
+.player-top-seekbar .player-progress-fill {
   height: 100%;
-  background: #8b3dff;
-  /* Rich purple */
-  border-radius: 2px;
-  box-shadow: 0 0 8px rgba(157, 78, 221, 0.4);
+  background: var(--color-primary);
+  box-shadow: 0 0 10px rgba(160, 56, 255, 0.45);
   position: relative;
   transition: width 0.1s linear;
 }
 
-.player-progress-handle {
-  width: 10px;
-  height: 10px;
+.player-top-seekbar .player-progress-handle {
+  width: 12px;
+  height: 12px;
   background: #ffffff;
   border-radius: 50%;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%) scale(0);
   opacity: 0;
-  box-shadow: 0 0 6px rgb(0, 0, 0);
+  box-shadow: 0 0 6px rgba(0,0,0,0.6);
   transition: transform 0.2s ease, opacity 0.2s;
 }
 
 @media (hover: hover) {
-  .player-progress-wrap:hover .player-progress-handle {
+  .player-top-seekbar:hover .player-progress-handle {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
 }
 
-/* ── 2. Main Row Layout ── */
+/* ── 2. Main Row Layout — Deezer Desktop height ── */
 .player-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  height: 85px;
-  /* Fixed taller height for premium feel */
+  padding: 0 24px;
+  height: 84px;
 }
 
 /* ── Left: Now Playing ── */
 .player-now-playing {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex: 1;
   min-width: 0;
 }
 
 .now-playing-cover {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -138,23 +119,12 @@
 }
 
 .now-playing-cover.placeholder {
-  background: linear-gradient(135deg, #2a2a35, #1a1a24);
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-card));
 }
 
 @media (hover: hover) {
   .player-now-playing:hover .now-playing-cover:not(.placeholder) {
     transform: scale(1.05);
-    /* Slight pop on hover */
-  }
-}
-
-.now-playing-cover[style*="pointer"] {
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .now-playing-cover[style*="pointer"]:hover {
-    box-shadow: 0 0 0 2px #8b3dff, 0 4px 12px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -166,21 +136,20 @@
 }
 
 .now-playing-title {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   letter-spacing: -0.2px;
   max-width: 180px;
 }
 
 .now-playing-artist {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   max-width: 180px;
 }
 
-/* Actions: Heart, Plus next to track */
 .now-playing-actions {
   display: flex;
   gap: 6px;
@@ -190,7 +159,7 @@
 .p-action-btn {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-tertiary);
   font-size: 0.9rem;
   cursor: pointer;
   padding: 4px;
@@ -201,24 +170,20 @@
 
 @media (hover: hover) {
   .p-action-btn:hover {
-    color: #ffffff;
+    color: var(--text-primary);
     transform: scale(1.1);
   }
 }
 
-.p-action-btn.liked {
-  color: #ef4444;
-  /* Heart red */
-}
+.p-action-btn.liked { color: #ef4444; }
 
 /* ── Center: Controls ── */
 .player-center {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 2;
-  /* Takes up more middle space */
 }
 
 .player-controls {
@@ -229,7 +194,7 @@
 
 .p-ctrl-btn,
 .p-skip-btn {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   display: flex;
@@ -239,25 +204,20 @@
   transition: all 0.2s ease;
 }
 
-.p-ctrl-btn {
-  font-size: 0.95rem;
-}
-
-.p-skip-btn {
-  font-size: 1.1rem;
-}
+.p-ctrl-btn  { font-size: 0.95rem; }
+.p-skip-btn  { font-size: 1.1rem; }
 
 @media (hover: hover) {
   .p-ctrl-btn:hover:not(:disabled),
   .p-skip-btn:hover:not(:disabled) {
-    color: #ffffff;
+    color: var(--text-primary);
     transform: scale(1.1);
   }
 }
 
 .p-ctrl-btn.ctrl-active {
-  color: #8b3dff;
-  filter: drop-shadow(0 0 4px rgba(139, 61, 255, 0.4));
+  color: var(--color-primary);
+  filter: drop-shadow(0 0 4px rgba(160, 56, 255, 0.5));
 }
 
 /* ── Sleep Timer Popup ── */
@@ -271,58 +231,51 @@
   position: absolute;
   bottom: 100%;
   right: 0;
-  width: 140px;
-  background: rgba(22, 22, 26, 0.95);
+  width: 148px;
+  background: var(--bg-elevated);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
   padding: 6px 0;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   z-index: 200;
   animation: sleep-slide-up 0.2s ease-out;
 }
 
 @keyframes sleep-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .sleep-popup-title {
   padding: 6px 14px;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  letter-spacing: 0.8px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 4px;
 }
 
 .sleep-item {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
-  padding: 8px 14px;
+  color: var(--text-secondary);
+  padding: 9px 14px;
   text-align: left;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 @media (hover: hover) {
   .sleep-item:hover {
-    background: rgba(139, 61, 255, 0.15);
-    color: #fff;
+    background: rgba(160, 56, 255, 0.12);
+    color: var(--text-primary);
   }
 }
 
@@ -330,7 +283,7 @@
   position: absolute;
   top: -8px;
   right: 2px;
-  background: #8b3dff;
+  background: var(--color-primary);
   color: #fff;
   font-size: 0.6rem;
   padding: 1px 4px;
@@ -346,7 +299,7 @@
   cursor: not-allowed;
 }
 
-/* Premium Play Button Drop-Shadow Wrapper */
+/* ── Play Button ── */
 .p-play-btn-wrapper {
   position: relative;
   display: flex;
@@ -357,86 +310,65 @@
 }
 
 @media (hover: hover) {
-  .p-play-btn-wrapper:hover {
-    transform: scale(1.08);
-  }
+  .p-play-btn-wrapper:hover { transform: scale(1.08); }
 }
+.p-play-btn-wrapper:active { transform: scale(0.95); }
 
-.p-play-btn-wrapper:active {
-  transform: scale(0.95);
-}
-
-/* Animated Pulse/Glow when playing */
+/* Animated pulse glow when playing */
 .p-play-btn-wrapper.is-playing::before {
   content: '';
   position: absolute;
-  top: -4px;
-  right: -4px;
-  bottom: -4px;
-  left: -4px;
+  inset: -4px;
   border-radius: 50%;
-  background: #8b3dff;
-  opacity: 0.3;
+  background: var(--color-primary);
+  opacity: 0.28;
   filter: blur(8px);
   z-index: -1;
   animation: pulse-glow 2.5s infinite alternate ease-in-out;
 }
 
 @keyframes pulse-glow {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.2;
-  }
-
-  100% {
-    transform: scale(1.1);
-    opacity: 0.5;
-  }
+  0%   { transform: scale(0.95); opacity: 0.2; }
+  100% { transform: scale(1.1);  opacity: 0.5; }
 }
 
 .p-play-btn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: #8b3dff;
-  /* Purple play button matching the mockup */
+  background: var(--color-primary);
   color: #ffffff !important;
-  /* White icon center */
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1rem;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(157, 78, 221, 0.4);
-  transition: background 0.2s;
+  box-shadow: 0 4px 12px rgba(160, 56, 255, 0.45);
+  transition: background 0.15s, transform 0.1s;
 }
 
 @media (hover: hover) {
-  .p-play-btn:hover {
-    background: #8534ff;
-  }
+  .p-play-btn:hover { background: var(--color-primary-dark); }
 }
-
-/* Remove old absolute timers element since renamed */
+.p-play-btn:active { transform: scale(0.95); }
 
 /* ── Right: Extras ── */
 .player-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 16px;
+  gap: 14px;
   flex: 1;
   position: relative;
 }
 
 .p-icon-btn,
 .p-queue-btn {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   background: transparent;
   border: none;
-  font-size: 1.1rem;
-  /* Slightly larger */
+  font-size: 1.05rem;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -446,20 +378,18 @@
 @media (hover: hover) {
   .p-icon-btn:hover,
   .p-queue-btn:hover {
-    color: #ffffff;
+    color: var(--text-primary);
     transform: scale(1.1);
   }
 }
 
-.p-queue-btn.active {
-  color: #ffffff;
-}
+.p-queue-btn.active { color: var(--color-primary); }
 
 /* Volume Bar */
 .volume-track {
-  width: 90px;
+  width: 88px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--bg-highlight);
   border-radius: 2px;
   position: relative;
   cursor: pointer;
@@ -469,16 +399,13 @@
 
 .volume-fill {
   height: 100%;
-  background: #8b3dff;
+  background: var(--color-primary);
   border-radius: 2px;
   transition: background 0.2s;
 }
 
 @media (hover: hover) {
-  .volume-track:hover .volume-fill {
-    background: #8534ff;
-    /* Highlights color on hover */
-  }
+  .volume-track:hover .volume-fill { background: var(--color-primary-light); }
 }
 
 .volume-handle {
@@ -490,7 +417,7 @@
   top: 50%;
   transform: translate(-50%, -50%) scale(0);
   opacity: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -501,18 +428,18 @@
   }
 }
 
-/* ── Queue Popup (Redesigned) ── */
+/* ── Queue Popup ── */
 .queue-popup {
   position: absolute;
   bottom: calc(100% + 20px);
   right: 0;
   width: 320px;
   max-height: 400px;
-  background: rgba(20, 20, 25, 0.9);
+  background: var(--bg-elevated);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
   display: flex;
   flex-direction: column;
@@ -522,23 +449,16 @@
 }
 
 @keyframes queue-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .queue-popup-hdr {
   font-size: 0.9rem;
   font-weight: 700;
-  color: #ffffff;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .queue-popup-list {
@@ -547,43 +467,25 @@
   padding: 8px;
 }
 
-/* Custom Scrollbar */
-.queue-popup-list::-webkit-scrollbar {
-  width: 6px;
-}
 
-.queue-popup-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.queue-popup-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-}
-
-.queue-popup-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
 
 .queue-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s;
 }
 
 @media (hover: hover) {
-  .queue-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
+  .queue-item:hover { background: rgba(255, 255, 255, 0.06); }
 }
 
 .queue-item-active {
-  background: rgba(112, 0, 255, 0.15);
-  border-left: 3px solid #8b3dff;
+  background: rgba(160, 56, 255, 0.12);
+  border-left: 3px solid var(--color-primary);
   border-top-left-radius: 4px;
   border-bottom-left-radius: 4px;
 }
@@ -596,74 +498,40 @@
   flex-shrink: 0;
 }
 
-.queue-item-idx {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
-  width: 18px;
-  text-align: right;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.queue-item-active .queue-item-idx {
-  color: #ff0055;
-}
-
-.queue-item-info {
-  flex: 1;
-  min-width: 0;
-}
+.queue-item-info { flex: 1; min-width: 0; }
 
 .queue-item-title {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
-.queue-item-active .queue-item-title {
-  color: #8b3dff;
-}
+.queue-item-active .queue-item-title { color: var(--color-primary); }
 
 .queue-item-artist {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 
 .queue-empty {
   padding: 30px 20px;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-tertiary);
   text-align: center;
 }
 
-/* ── Extras Layout Adjustments ── */
 .volume-wrapper {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.extra-icon {
-  font-size: 1rem;
-  opacity: 0.6;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.extra-icon:hover {
-  opacity: 1;
-  color: #ffffff;
-}
-
-/* ── Queue Item Drag/Header ── */
 .queue-sec-hdr {
   font-size: 0.72rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.4);
-  padding: 12px 14px 4px;
+  color: var(--text-tertiary);
+  padding: 10px 14px 4px;
   text-transform: uppercase;
   letter-spacing: 0.7px;
 }
@@ -671,75 +539,49 @@
 .queue-drag-handle {
   margin-left: auto;
   cursor: grab;
-  padding: 6px 12px;
-  color: rgba(255, 255, 255, 0.3);
+  padding: 6px 10px;
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   transition: color 0.15s;
 }
 
-.queue-item:hover .queue-drag-handle {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.queue-drag-handle:active {
-  cursor: grabbing;
-}
+.queue-item:hover .queue-drag-handle { color: var(--text-secondary); }
+.queue-drag-handle:active { cursor: grabbing; }
 
 .queue-item-active.now-playing-row {
-  background: rgba(157, 78, 221, 0.12);
-  border-left: 3px solid #8b3dff;
+  background: rgba(160, 56, 255, 0.1);
+  border-left: 3px solid var(--color-primary);
 }
 
+/* ── Mobile ── */
 @media (max-width: 768px) {
   .player-inner {
-    padding: 10px 16px;
-    height: 70px;
+    padding: 0 16px;
+    height: 64px;
   }
 
-  /* Hide center seekbar range on small mini player bar */
-  .player-seekbar-row {
-    display: none;
-  }
+  .player-seekbar-row { display: none; }
+  .player-time { display: none; }
 
-  /* Compact left cover/title */
   .now-playing-cover {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
   }
 
   .now-playing-title {
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     max-width: 140px;
   }
 
-  /* Hide right controls (Volume etc) to make space */
-  .player-right {
-    display: none;
-  }
+  .player-right { display: none; }
+  .player-controls { gap: 12px; }
+  .p-ctrl-btn { display: none; }
 
-  /* Keep just the play and next button in center */
-  .player-controls {
-    gap: 12px;
-  }
-
-  .p-ctrl-btn {
-    display: none;
-    /* Shuffle/Repeat hide */
-  }
-
-  .player-center {
-    flex: 0;
-    /* Shrink center wrapper so left can grow */
-  }
+  .player-center { flex: 0; }
 }
 
 @media (max-width: 420px) {
-  .now-playing-title {
-    max-width: 110px;
-  }
-
-  .now-playing-artist {
-    max-width: 110px;
-  }
+  .now-playing-title  { max-width: 110px; }
+  .now-playing-artist { max-width: 110px; }
 }

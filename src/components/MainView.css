@@ -109,8 +109,8 @@
   }
 
   .home-search-mobile:focus-within {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--color-primary);
   }
 
   .home-search-mobile input {
@@ -148,17 +148,18 @@
 .recent-cover-wrap {
   width: var(--recent-size);
   height: var(--recent-size);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
 }
 
 .recent-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  mix-blend-mode: screen;
 }
 
 .recent-cover.placeholder {
@@ -198,7 +199,7 @@
 .folder-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 16px;
   display: flex;
   align-items: center;
@@ -217,14 +218,21 @@
 .folder-icon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
-  background: var(--accent-blue);
-  color: white;
+  border-radius: var(--radius-sm);
+  background: rgba(160, 56, 255, 0.18);
+  color: var(--color-primary-light);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
   flex-shrink: 0;
+}
+
+.folder-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: screen;
 }
 
 .folder-info {
@@ -400,10 +408,66 @@
   width: 28px;
   height: 28px;
   border: 3px solid var(--bg-highlight);
-  border-top-color: var(--accent-primary);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 12px;
+}
+
+/* Shimmer skeleton rows (Deezer loading pattern) */
+.track-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.track-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.track-skeleton-num {
+  width: 32px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.track-skeleton-cover {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.track-skeleton-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.track-skeleton-title {
+  height: 13px;
+  border-radius: 4px;
+  width: 55%;
+}
+
+.track-skeleton-artist {
+  height: 11px;
+  border-radius: 4px;
+  width: 35%;
+}
+
+.track-skeleton-duration {
+  width: 36px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 @keyframes spin {
@@ -541,7 +605,7 @@
 }
 
 .active-num {
-  color: var(--accent-primary);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -552,7 +616,7 @@
 }
 
 .rp-active {
-  color: var(--accent-primary);
+  color: var(--color-primary);
 }
 
 .title-cell {
@@ -574,6 +638,7 @@
   color: var(--text-tertiary);
   font-size: 0.75rem;
   flex-shrink: 0;
+  mix-blend-mode: screen;
 }
 
 .track-cover-mini.placeholder {
@@ -598,13 +663,13 @@
 .format-badge {
   font-size: 0.6rem;
   font-weight: 800;
-  background: var(--bg-highlight);
-  color: var(--text-secondary);
+  background: rgba(160, 56, 255, 0.1);
+  color: var(--color-primary-light);
   padding: 2px 5px;
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(160, 56, 255, 0.25);
   flex-shrink: 0;
 }
 
@@ -635,7 +700,7 @@
   display: block;
   width: 3px;
   border-radius: 2px;
-  background: var(--accent-primary);
+  background: var(--color-primary);
   animation: eq 0.8s ease-in-out infinite;
 }
 
@@ -869,3 +934,169 @@
 .td-item-more-mob {
   display: none;
 }
+
+/* ── Playlist Picker Popup ── */
+.playlist-picker-popup {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 180px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 300;
+  animation: queue-slide-up 0.2s ease-out;
+}
+
+.playlist-picker-hdr {
+  padding: 8px 12px 6px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.playlist-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 0.83rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+
+@media (hover: hover) {
+  .playlist-picker-item:hover {
+    background: rgba(160, 56, 255, 0.12);
+    color: var(--text-primary);
+  }
+}
+
+.playlist-picker-empty {
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Search view */
+.search-view { padding: 0; }
+
+/* ── Folder Upload Button ── */
+.folder-upload-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-primary, #a038ff);
+  border: none;
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(160, 56, 255, 0.4);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
+}
+
+.folder-upload-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(160, 56, 255, 0.55);
+}
+
+.folder-upload-btn:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+/* ── Folder Upload Bar — always visible row above track list ── */
+.folder-upload-bar {
+  display: none; /* replaced by topbar button */
+}
+
+.folder-upload-count {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+/* On desktop, the title row already shows this info — hide the bar */
+@media (min-width: 769px) {
+  .folder-upload-bar {
+    display: none;
+  }
+}
+
+/* ── Topbar Upload Button ── */
+.topbar-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-primary, #a038ff);
+  border: none;
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+  box-shadow: 0 4px 14px rgba(160, 56, 255, 0.4);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
+}
+
+.topbar-upload-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(160, 56, 255, 0.55);
+}
+
+.topbar-upload-btn:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+/* ── Folder Create Button (in Folders section header) ── */
+.folder-create-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(160, 56, 255, 0.15);
+  border: 1px solid rgba(160, 56, 255, 0.3);
+  color: var(--color-primary, #a038ff);
+  font-size: 0.88rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.folder-create-btn:hover {
+  background: var(--color-primary, #a038ff);
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 4px 14px rgba(160, 56, 255, 0.4);
+}
+
+.folder-create-btn:active {
+  transform: scale(0.95);
+}
+
+
+

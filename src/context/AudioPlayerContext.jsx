@@ -50,6 +50,8 @@ export const AudioPlayerProvider = ({ children }) => {
 
   const activeLoadIdRef = useRef(null);
   const nextTrackRef = useRef(null);
+  const prevTrackRef = useRef(null);
+  const togglePlayRef = useRef(null);
   const fadeIntervalRef = useRef(null);
   const isFadingInRef = useRef(false);
   const preloadCacheRef = useRef({});
@@ -341,7 +343,6 @@ export const AudioPlayerProvider = ({ children }) => {
     await _loadAndPlay(q[nextIdx]);
   }, [_loadAndPlay]);
 
-  useEffect(() => { nextTrackRef.current = nextTrack; }, [nextTrack]);
 
   const prevTrack = useCallback(async () => {
     const q = queueRef.current;
@@ -368,6 +369,12 @@ export const AudioPlayerProvider = ({ children }) => {
       setIsPlaying(false);
     }
   }, []);
+
+  useEffect(() => { 
+    nextTrackRef.current = nextTrack; 
+    prevTrackRef.current = prevTrack;
+    togglePlayRef.current = togglePlay;
+  }, [nextTrack, prevTrack, togglePlay]);
 
   const toggleShuffle = useCallback(() => {
     setIsShuffled(prev => {
@@ -447,12 +454,41 @@ export const AudioPlayerProvider = ({ children }) => {
   }, [prevVolume, updateVolume]);
 
   const seek = useCallback((newProgress) => {
-    if (!audioRef.current.duration) return;
-    const time = newProgress * audioRef.current.duration;
+    const dur = audioRef.current.duration;
+    // Guard: duration must be a positive finite number, progress must be finite
+    if (!dur || !isFinite(dur) || !isFinite(newProgress)) return;
+    const time = Math.max(0, Math.min(dur, newProgress * dur));
     audioRef.current.currentTime = time;
     setProgress(newProgress);
     setCurrentTime(time);
   }, []);
+
+  // ── MediaSession API (Background Playback & Lock Screen Controls) ────────
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    if (currentTrack) {
+      const coverUrl = currentTrack.coverUrl && !currentTrack.coverUrl.includes('images.unsplash') 
+          ? currentTrack.coverUrl 
+          : '/logo.png';
+
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title: currentTrack.title || 'Unknown Title',
+        artist: currentTrack.artist || 'Unknown Artist',
+        album: currentTrack.album || '',
+        artwork: [{ src: coverUrl, sizes: '512x512', type: 'image/png' }]
+      });
+    }
+
+    navigator.mediaSession.setActionHandler('play', () => { togglePlayRef.current?.(); });
+    navigator.mediaSession.setActionHandler('pause', () => { togglePlayRef.current?.(); });
+    navigator.mediaSession.setActionHandler('previoustrack', () => { prevTrackRef.current?.(); });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { nextTrackRef.current?.(); });
+
+    // Update playback state
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+  }, [currentTrack, isPlaying]);
 
   return (
     <AudioPlayerContext.Provider value={{

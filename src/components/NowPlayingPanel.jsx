@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useApp } from '../context/AppContext';
 import {
@@ -41,13 +41,34 @@ const NowPlayingPanel = ({ onClose }) => {
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [sizeFromHead, setSizeFromHead] = useState(null);
+  // Local visual progress during seekbar drag (null = use context value)
+  const [dragProgress, setDragProgress] = useState(null);
 
-  // Swipe-to-dismiss state
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const [translateY, setTranslateY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  // ── Swipe-to-dismiss — use refs so handlers never have stale closures ──
   const [isClosing, setIsClosing] = useState(false);
+  const touchStartRef = useRef(0);     // finger Y on touch start
+  const translateYRef = useRef(0);     // live drag offset (mirrors translateY state)
+  const overlayRef = useRef(null);     // direct DOM manipulation for smooth 60fps
+
+  // ── Card-Peek Pager Refs ──
+  const pagerViewportRef = useRef(null);
+  const pagerRailRef = useRef(null);
+  const pagerCardRefs = [useRef(null), useRef(null), useRef(null)]; // prev, current, next
+  const artTouchStartX = useRef(0);
+  const artTouchStartY = useRef(0);
+  const artTouchStartTime = useRef(0);
+  const artDragDirection = useRef(null);
+  const pagerDragDelta = useRef(0);
+  const skipLock = useRef(false);    // debounce lock for skip buttons
+  const pagerBaseX = useRef(0);
+  const pagerAnimating = useRef(false);
+  const rafRef = useRef(null);
+  // Background crossfade
+  const bgNextRef = useRef(null);
+  const bgNextSrc = useRef('');
+  const bgColorOverlayRef = useRef(null); // solid color overlay for palette crossfade
+  const dominantColorCache = useRef({});  // imgSrc -> 'r,g,b'
+  const carouselRef = pagerRailRef;
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
   const nextUpTracks = currentIdx !== -1 ? queue.slice(currentIdx + 1) : queue;
@@ -87,19 +108,34 @@ const NowPlayingPanel = ({ onClose }) => {
     return () => document.removeEventListener('click', hidePopups);
   }, [showQueue, showSleep, showMoreOptions]);
 
+  // ── Seekbar drag — visual update via local state, seek() commits on release ──
   const handleSeekDrag = (e) => {
-    const getClientX = (evt) => evt.touches && evt.touches.length > 0 ? evt.touches[0].clientX : evt.clientX;
+    const getClientX = (evt) => {
+      // touches is empty on touchend — use changedTouches instead
+      if (evt.changedTouches && evt.changedTouches.length > 0) return evt.changedTouches[0].clientX;
+      if (evt.touches && evt.touches.length > 0) return evt.touches[0].clientX;
+      return evt.clientX;
+    };
     const bar = e.currentTarget;
     const r = bar.getBoundingClientRect();
-    const val = Math.max(0, Math.min(1, (getClientX(e) - r.left) / r.width));
-    seek(val);
+    const computeVal = (clientX) => {
+      const v = (clientX - r.left) / r.width;
+      return isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+    };
+
+    // Track last valid position so touchend (which has empty touches) can still seek
+    let lastVal = computeVal(getClientX(e));
+    setDragProgress(lastVal);
 
     const onMove = (mE) => {
       if (mE.cancelable) mE.preventDefault();
-      const moveVal = Math.max(0, Math.min(1, (getClientX(mE) - r.left) / r.width));
-      seek(moveVal);
+      lastVal = computeVal(getClientX(mE));
+      setDragProgress(lastVal);
     };
     const onEnd = () => {
+      // Use lastVal — safe even on touchend where touches[] is empty
+      seek(lastVal);
+      setDragProgress(null);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
       document.removeEventListener('touchmove', onMove);
@@ -115,13 +151,13 @@ const NowPlayingPanel = ({ onClose }) => {
     const getClientX = (evt) => evt.touches && evt.touches.length > 0 ? evt.touches[0].clientX : evt.clientX;
     const bar = e.currentTarget;
     const r = bar.getBoundingClientRect();
-    const val = Math.max(0, Math.min(1, (getClientX(e) - r.left) / r.width));
-    updateVolume(val);
+    const computeVal = (clientX) => Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+
+    updateVolume(computeVal(getClientX(e)));
 
     const onMove = (mE) => {
       if (mE.cancelable) mE.preventDefault();
-      const moveVal = Math.max(0, Math.min(1, (getClientX(mE) - r.left) / r.width));
-      updateVolume(moveVal);
+      updateVolume(computeVal(getClientX(mE)));
     };
     const onEnd = () => {
       document.removeEventListener('mousemove', onMove);
@@ -135,44 +171,50 @@ const NowPlayingPanel = ({ onClose }) => {
     document.addEventListener('touchend', onEnd);
   };
 
-  const coverSrc = currentTrack?.coverUrl && !currentTrack.coverUrl.includes('images.unsplash.com')
-    ? currentTrack.coverUrl
-    : logo;
-
   // ── Swipe to Dismiss Logic ───────────────────────────────────────────────
   const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientY);
-    setIsDragging(true);
+    touchStartRef.current = e.targetTouches[0].clientY;
+    translateYRef.current = 0;
+    if (overlayRef.current) overlayRef.current.style.transition = 'none';
   };
 
   const onTouchMove = (e) => {
-    const currentTouch = e.targetTouches[0].clientY;
-    const diff = currentTouch - touchStart;
-    
-    // Only allow dragging downwards
+    // Prevent vertical panel drag if the user is currently dragging the album art horizontally
+    if (artDragDirection.current === 'h') return;
+
+    const diff = e.targetTouches[0].clientY - touchStartRef.current;
     if (diff > 0) {
-      setTranslateY(diff);
-      setTouchEnd(currentTouch);
+      translateYRef.current = diff;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        if (overlayRef.current) overlayRef.current.style.transform = `translateY(${diff}px)`;
+      });
     }
   };
 
   const onTouchEnd = () => {
-    setIsDragging(false);
-    if (!touchStart || !touchEnd) return;
-    const distance = touchEnd - touchStart;
-    const isSwipeDown = distance > 100; // threshold for closing
-
-    if (isSwipeDown) {
-      handleClose();
+    const dist = translateYRef.current;
+    if (dist > 100) {
+      if (overlayRef.current) {
+        overlayRef.current.style.transition = 'transform 0.38s cubic-bezier(0.4, 0, 1, 1), opacity 0.35s ease';
+      }
+      setIsClosing(true);
+      setTimeout(onClose, 400);
     } else {
-      setTranslateY(0);
+      translateYRef.current = 0;
+      if (overlayRef.current) {
+        overlayRef.current.style.transition = 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1)';
+        overlayRef.current.style.transform = `translateY(0px)`;
+      }
     }
   };
 
   const handleClose = () => {
+    if (overlayRef.current) {
+      overlayRef.current.style.transition = 'transform 0.38s cubic-bezier(0.4, 0, 1, 1), opacity 0.35s ease';
+    }
     setIsClosing(true);
-    setTimeout(onClose, 400); // match transition duration
+    setTimeout(onClose, 400);
   };
 
   useEffect(() => {
@@ -192,17 +234,313 @@ const NowPlayingPanel = ({ onClose }) => {
   const durationSec = duration > 0 ? duration : (currentTrack?.durationMs ? currentTrack.durationMs / 1000 : 0);
   const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
 
+  const getCoverSrc = (track) => track?.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? track.coverUrl : logo;
+  const coverSrc = getCoverSrc(currentTrack);
+
+  const prevTrackData = currentIdx > 0 ? queue[currentIdx - 1] : (isRepeating && queue.length ? queue[queue.length - 1] : null);
+  const nextTrackData = currentIdx < queue.length - 1 ? queue[currentIdx + 1] : (isRepeating && queue.length ? queue[0] : null);
+
+  // ── Pager constants (80% card, 10% peek each side, 16dp gap) ──
+  const CARD_FRACTION = 0.85;
+  const CARD_GAP = 16;
+
+  // ── Color Extraction ──
+  const extractDominantColor = (imgSrc, callback) => {
+    if (!imgSrc || imgSrc === logo) { callback('20,20,30'); return; }
+    if (dominantColorCache.current[imgSrc]) { callback(dominantColorCache.current[imgSrc]); return; }
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40; canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 40, 40);
+        const d = ctx.getImageData(0, 0, 40, 40).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          // Skip near-black and near-white pixels for a more vibrant result
+          const brightness = (d[i] + d[i + 1] + d[i + 2]) / 3;
+          if (brightness > 20 && brightness < 230) {
+            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+          }
+        }
+        if (n === 0) { callback('20,20,30'); return; }
+        // Boost saturation slightly
+        const avg = `${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)}`;
+        dominantColorCache.current[imgSrc] = avg;
+        callback(avg);
+      } catch { callback('20,20,30'); }
+    };
+    img.onerror = () => callback('20,20,30');
+    img.src = imgSrc;
+  };
+
+  const applyDominantColor = (imgSrc, transition = true) => {
+    extractDominantColor(imgSrc, (rgb) => {
+      if (!bgColorOverlayRef.current) return;
+      bgColorOverlayRef.current.style.transition = transition
+        ? 'background-color 400ms linear, opacity 400ms linear'
+        : 'none';
+      bgColorOverlayRef.current.style.backgroundColor = `rgba(${rgb}, 0.55)`;
+      bgColorOverlayRef.current.style.opacity = '1';
+    });
+  };
+
+  // Apply color on mount and track change
+  React.useEffect(() => {
+    applyDominantColor(coverSrc, true);
+  }, [coverSrc]); // eslint-disable-line
+
+  // ── Per-card scale/opacity interpolation ──
+  const updateCardStyles = (railX) => {
+    if (!pagerViewportRef.current) return;
+    const vw = pagerViewportRef.current.offsetWidth;
+    const cardW = vw * CARD_FRACTION;
+    const screenCenter = vw / 2;
+
+    pagerCardRefs.forEach((ref, i) => {
+      if (!ref.current) return;
+      // Center of card[i] in viewport coordinates when rail is at railX
+      const cardCenter = railX + i * (cardW + CARD_GAP) + cardW / 2;
+      const dist = cardCenter - screenCenter;
+      const absDist = Math.abs(dist);
+      const t = Math.min(absDist / cardW, 1);
+
+      const scale = 1.0; // User requested all cards be the same size
+      const opacity = 1.0 - t * 0.5;  // 1.0 → 0.50 fade for side cards
+
+      // No shift needed since scale is 1.0
+      ref.current.style.transform = `translateX(0px) scale(${scale})`;
+      ref.current.style.opacity = opacity.toString();
+    });
+  };
+
+  // ── JS Spring snap ──
+  // Critically damped to avoid bounce-back: DAMPING ≈ 2 * sqrt(STIFFNESS)
+  const springSnap = (fromX, toX, onUpdate, onComplete) => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const STIFFNESS = 400;
+    const DAMPING = 40;
+    let pos = fromX;
+    let vel = 0;
+    let lastT = null;
+
+    const step = (t) => {
+      if (!lastT) lastT = t;
+      const dt = Math.min((t - lastT) / 1000, 0.020);
+      lastT = t;
+      const acc = -STIFFNESS * (pos - toX) - DAMPING * vel;
+      vel += acc * dt;
+      pos += vel * dt;
+      onUpdate(pos);
+      if (Math.abs(pos - toX) < 0.5 && Math.abs(vel) < 5) {
+        onUpdate(toX);
+        onComplete?.();
+      } else {
+        rafRef.current = requestAnimationFrame(step);
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  };
+
+  // ── Pager geometry: mount-only + ResizeObserver ──
+  React.useEffect(() => {
+    const calcBase = () => {
+      if (!pagerViewportRef.current || !pagerRailRef.current) return;
+      if (pagerAnimating.current) return;
+
+      // Desktop guard: skip carousel logic if screen is wide
+      if (window.innerWidth > 768) {
+        pagerRailRef.current.style.transform = 'none';
+        pagerCardRefs.forEach((ref) => {
+          if (ref.current) {
+            ref.current.style.transform = 'none';
+            ref.current.style.opacity = '1';
+          }
+        });
+        return;
+      }
+
+      const vw = pagerViewportRef.current.offsetWidth;
+      const cardW = vw * CARD_FRACTION;
+      const peek = vw * (1 - CARD_FRACTION) / 2;
+      const base = peek - (cardW + CARD_GAP);
+      pagerBaseX.current = base;
+      pagerRailRef.current.style.transition = 'none';
+      pagerRailRef.current.style.transform = `translateX(${base}px)`;
+      updateCardStyles(base);
+    };
+    calcBase();
+    const ro = new ResizeObserver(calcBase);
+    if (pagerViewportRef.current) ro.observe(pagerViewportRef.current);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line
+
+  const handleArtTouchStart = (e) => {
+    if (pagerAnimating.current) return;
+    artTouchStartX.current = e.targetTouches[0].clientX;
+    artTouchStartY.current = e.targetTouches[0].clientY;
+    artTouchStartTime.current = performance.now();
+    artDragDirection.current = null;
+    pagerDragDelta.current = 0;
+    if (pagerRailRef.current) pagerRailRef.current.style.transition = 'none';
+  };
+
+  const handleArtTouchMove = (e) => {
+    if (pagerAnimating.current) return;
+    const cx = e.targetTouches[0].clientX;
+    const cy = e.targetTouches[0].clientY;
+
+    if (!artDragDirection.current) {
+      const dx = Math.abs(cx - artTouchStartX.current);
+      const dy = Math.abs(cy - artTouchStartY.current);
+      if (dx > 6 || dy > 6) {
+        artDragDirection.current = dx > dy ? 'h' : 'v';
+        if (artDragDirection.current === 'v') return;
+      } else return;
+    }
+    if (artDragDirection.current !== 'h') return;
+    e.stopPropagation();
+
+    const delta = cx - artTouchStartX.current;
+    pagerDragDelta.current = delta;
+    const railX = pagerBaseX.current + delta;
+
+    // ── 1:1 finger tracking ──
+    if (pagerRailRef.current) pagerRailRef.current.style.transform = `translateX(${railX}px)`;
+    updateCardStyles(railX);
+
+    // ── Background crossfade ──
+    const incomingTrack = delta < 0 ? nextTrackData : prevTrackData;
+    const incomingSrc = incomingTrack ? getCoverSrc(incomingTrack) : '';
+    if (incomingSrc && bgNextRef.current) {
+      if (bgNextSrc.current !== incomingSrc) {
+        bgNextRef.current.style.backgroundImage = `url(${incomingSrc})`;
+        bgNextSrc.current = incomingSrc;
+      }
+      const vw = pagerViewportRef.current?.offsetWidth || window.innerWidth;
+      const progress = Math.min(Math.abs(delta) / (vw * CARD_FRACTION * 0.6), 1);
+      bgNextRef.current.style.opacity = progress.toString();
+    } else if (bgNextRef.current) {
+      bgNextRef.current.style.opacity = '0';
+    }
+  };
+
+  const handleArtTouchEnd = () => {
+    if (artDragDirection.current !== 'h') return;
+
+    const delta = pagerDragDelta.current;
+    const elapsed = performance.now() - artTouchStartTime.current;
+    const velocity = Math.abs(delta) / elapsed; // px per ms
+
+    const vw = pagerViewportRef.current?.offsetWidth || window.innerWidth;
+    const cardW = vw * CARD_FRACTION;
+
+    // Distance threshold OR Velocity threshold (> 0.8 px/ms is a fast flick)
+    const passedThreshold = Math.abs(delta) > cardW * 0.22;
+    const passedVelocity = velocity > 0.8;
+    const shouldPage = passedThreshold || passedVelocity;
+
+    const currentRailX = pagerBaseX.current + delta;
+
+    const commitPage = (trackFn, direction) => {
+      pagerAnimating.current = true;
+      const snapTarget = pagerBaseX.current + direction * (cardW + CARD_GAP);
+
+      if (bgNextRef.current) {
+        bgNextRef.current.style.transition = 'opacity 0.32s ease';
+        bgNextRef.current.style.opacity = '1';
+      }
+
+      springSnap(currentRailX, snapTarget,
+        (x) => {
+          if (pagerRailRef.current) pagerRailRef.current.style.transform = `translateX(${x}px)`;
+          updateCardStyles(x);
+        },
+        () => {
+          if (pagerRailRef.current) {
+            pagerRailRef.current.style.transform = `translateX(${pagerBaseX.current}px)`;
+          }
+          updateCardStyles(pagerBaseX.current);
+
+          if (bgNextRef.current) {
+            bgNextRef.current.style.transition = 'none';
+            bgNextRef.current.style.opacity = '0';
+            bgNextSrc.current = '';
+          }
+
+          trackFn();
+          pagerAnimating.current = false;
+        }
+      );
+    };
+
+    if (shouldPage && delta < 0 && nextTrackData) {
+      commitPage(nextTrack, -1);
+    } else if (shouldPage && delta > 0 && prevTrackData) {
+      commitPage(prevTrack, +1);
+    } else {
+      springSnap(currentRailX, pagerBaseX.current,
+        (x) => {
+          if (pagerRailRef.current) pagerRailRef.current.style.transform = `translateX(${x}px)`;
+          updateCardStyles(x);
+        },
+        () => {
+          if (bgNextRef.current) {
+            bgNextRef.current.style.transition = 'opacity 0.3s ease';
+            bgNextRef.current.style.opacity = '0';
+          }
+        }
+      );
+    }
+    artDragDirection.current = null;
+    pagerDragDelta.current = 0;
+  };
+
+  // ── Debounced Skip Actions ──
+  const handleNextTrack = () => {
+    if (skipLock.current) return;
+    skipLock.current = true;
+    nextTrack();
+    setTimeout(() => { skipLock.current = false; }, 300);
+  };
+
+  const handlePrevTrack = () => {
+    if (skipLock.current) return;
+    skipLock.current = true;
+    prevTrack();
+    setTimeout(() => { skipLock.current = false; }, 300);
+  };
+
   return (
-    <div 
-      className={`np-overlay ${isDragging ? 'dragging' : ''} ${isClosing ? 'closing' : ''}`}
-      style={{ 
-        transform: `translateY(${isClosing ? '100%' : `${translateY}px`})${isDragging ? '' : ` scale(${isClosing ? 0.95 : 1})`}`,
-        transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, scale 0.5s cubic-bezier(0.19, 1, 0.22, 1)'
+    <div
+      className={`np-overlay ${isClosing ? 'closing' : ''}`}
+      ref={overlayRef}
+      style={{
+        transform: isClosing ? 'translateY(100vh)' : 'translateY(0px)',
+        opacity: isClosing ? 0 : 1,
       }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
+      {/* Blurred background art — current track */}
+      <div
+        className="np-bg"
+        style={{ backgroundImage: `url(${coverSrc})` }}
+      />
+      {/* Blurred background art — incoming track (crossfade overlay) */}
+      <div
+        className="np-bg np-bg-next"
+        ref={bgNextRef}
+        style={{ opacity: 0 }}
+      />
+      {/* Dominant color overlay — crossfades 400ms on track change */}
+      <div className="np-bg-color" ref={bgColorOverlayRef} />
+      {/* Dark vignette for text legibility */}
+      <div className="np-bg-vignette" />
+
       {/* Top Header */}
       <div className="npp-top-header">
         <button className="np-close-chevron" onClick={handleClose}><FaChevronDown /></button>
@@ -216,97 +554,100 @@ const NowPlayingPanel = ({ onClose }) => {
       </div>
 
       <div className="np-panel">
-
-        {/* Blurred background art */}
+        {/* ── Card-Peek Pager (mobile only — desktop just shows the flipper) ── */}
         <div
-          className="np-bg"
-          style={{ backgroundImage: `url(${coverSrc})` }}
-        />
+          className="np-pager-viewport"
+          ref={pagerViewportRef}
+        >
+          {/* Rail: 3 slots — prev | current | next — positioned side by side */}
+          <div
+            className="np-pager-rail"
+            ref={pagerRailRef}
+            onTouchStart={handleArtTouchStart}
+            onTouchMove={handleArtTouchMove}
+            onTouchEnd={handleArtTouchEnd}
+          >
+            {/* Prev card */}
+            <div className="np-pager-card" ref={pagerCardRefs[0]}>
+              {prevTrackData ? (
+                <div className="np-squircle-cover-wrapper">
+                  <img src={getCoverSrc(prevTrackData)} alt="prev" className="np-squircle-cover" />
+                </div>
+              ) : <div className="np-pager-card-empty" />}
+            </div>
 
-        {/* Visual Display with Flip Card */}
-        <div className={`np-cover-flipper ${isFlipped ? 'flipped' : ''}`} onClick={() => setIsFlipped(!isFlipped)}>
-          <div className="np-cover-flipper-inner">
-            <div className="np-cover-front">
-              {viewMode === 'vinyl' ? (
-                <div className="np-turntable" style={{ cursor: 'default' }}>
-                  {/* The tonearm */}
-                  <div
-                    className={`tonearm-wrap ${isPlaying ? 'arm-on' : 'arm-off'}`}
-                    onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                    title={isPlaying ? 'Pause' : 'Play'}
-                  >
-                    <div className="tonearm-base">
-                      <div className="tonearm-base-inner" />
-                      <div className="tonearm-base-ring" />
-                      <div className="tonearm-base-dot" />
-                    </div>
-
-                    <div className="tonearm-counterweight" />
-
-                    <div className="tonearm-segment-1">
-                      <div className="tonearm-segment-2">
-                        <div className="tonearm-head">
-                          <div className="tonearm-head-connector" />
-                          <div className="tonearm-head-body">
-                            <div className="tonearm-needle-lines" />
+            {/* Current card — full flip card */}
+            <div className="np-pager-card" ref={pagerCardRefs[1]}>
+              <div
+                className={`np-cover-flipper ${isFlipped ? 'flipped' : ''}`}
+                onClick={() => { if (!artDragDirection.current) setIsFlipped(!isFlipped); }}
+              >
+                <div className="np-cover-flipper-inner">
+                  <div className="np-cover-front">
+                    {viewMode === 'vinyl' ? (
+                      <div className="np-turntable" style={{ cursor: 'default' }}>
+                        <div className={`vinyl-disc ${isPlaying ? 'spinning' : ''}`}>
+                          <div className="vinyl-groove g1" />
+                          <div className="vinyl-groove g2" />
+                          <div className="vinyl-groove g3" />
+                          <div className="vinyl-groove g4" />
+                          <div className="vinyl-label">
+                            <img src={coverSrc || logo} alt="album" className="vinyl-label-img" />
+                            <div className="vinyl-spindle" />
                           </div>
                         </div>
                       </div>
+                    ) : (
+                      <div className="np-squircle-cover-wrapper" style={{ marginTop: 0 }}>
+                        <img src={coverSrc || logo} alt="album" className="np-squircle-cover" style={{ objectFit: 'contain' }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="np-cover-back">
+                    <div className="track-details-card center-aligned">
+                      <div className="details-list">
+                        <div className="detail-entry">
+                          <span className="detail-prop">Codec</span>
+                          <span className="detail-val">{currentTrack?.format || 'Unknown'}</span>
+                        </div>
+                        {currentTrack?.channels && (
+                          <div className="detail-entry">
+                            <span className="detail-prop">Channels</span>
+                            <span className="detail-val">{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : currentTrack.channels}</span>
+                          </div>
+                        )}
+                        {currentTrack?.sampleRate && (
+                          <div className="detail-entry">
+                            <span className="detail-prop">Sample rate</span>
+                            <span className="detail-val">{currentTrack.sampleRate} Hz</span>
+                          </div>
+                        )}
+                        {currentTrack?.bitsPerSample && (
+                          <div className="detail-entry">
+                            <span className="detail-prop">Bits per sample</span>
+                            <span className="detail-val">{currentTrack.bitsPerSample}</span>
+                          </div>
+                        )}
+                        {sizeBytes > 0 && (
+                          <div className="detail-entry">
+                            <span className="detail-prop">Size</span>
+                            <span className="detail-val">{formatBytes(sizeBytes)}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Vinyl record disc */}
-                  <div className={`vinyl-disc ${isPlaying ? 'spinning' : ''}`}>
-                    <div className="vinyl-groove g1" />
-                    <div className="vinyl-groove g2" />
-                    <div className="vinyl-groove g3" />
-                    <div className="vinyl-groove g4" />
-                    <div className="vinyl-label">
-                      <img src={coverSrc || logo} alt="album" className="vinyl-label-img" />
-                      <div className="vinyl-spindle" />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="np-squircle-cover-wrapper" style={{ marginTop: 0 }}>
-                  <img src={coverSrc || logo} alt="album" className="np-squircle-cover" />
-                </div>
-              )}
-            </div>
-
-            <div className="np-cover-back">
-              <div className="track-details-card center-aligned">
-                <div className="details-list">
-                  <div className="detail-entry">
-                    <span className="detail-prop">Codec</span>
-                    <span className="detail-val">{currentTrack?.format || 'Unknown'}</span>
-                  </div>
-                  {currentTrack?.channels && (
-                    <div className="detail-entry">
-                      <span className="detail-prop">Channels</span>
-                      <span className="detail-val">{currentTrack.channels === 2 ? 'Stereo' : currentTrack.channels === 1 ? 'Mono' : currentTrack.channels}</span>
-                    </div>
-                  )}
-                  {currentTrack?.sampleRate && (
-                    <div className="detail-entry">
-                      <span className="detail-prop">Sample rate</span>
-                      <span className="detail-val">{currentTrack.sampleRate} Hz</span>
-                    </div>
-                  )}
-                  {currentTrack?.bitsPerSample && (
-                    <div className="detail-entry">
-                      <span className="detail-prop">Bits per sample</span>
-                      <span className="detail-val">{currentTrack.bitsPerSample}</span>
-                    </div>
-                  )}
-                  {sizeBytes > 0 && (
-                    <div className="detail-entry">
-                      <span className="detail-prop">Size</span>
-                      <span className="detail-val">{formatBytes(sizeBytes)}</span>
-                    </div>
-                  )}
                 </div>
               </div>
+            </div>
+
+            {/* Next card */}
+            <div className="np-pager-card" ref={pagerCardRefs[2]}>
+              {nextTrackData ? (
+                <div className="np-squircle-cover-wrapper">
+                  <img src={getCoverSrc(nextTrackData)} alt="next" className="np-squircle-cover" />
+                </div>
+              ) : <div className="np-pager-card-empty" />}
             </div>
           </div>
         </div>
@@ -319,10 +660,10 @@ const NowPlayingPanel = ({ onClose }) => {
 
         {/* Seekbar */}
         <div className="np-seekbar-row">
-          <span className="np-time">{formatTime(currentTime)}</span>
+          <span className="np-time">{formatTime(dragProgress != null ? dragProgress * duration : currentTime)}</span>
           <div className="np-seekbar" onMouseDown={handleSeekDrag} onTouchStart={handleSeekDrag}>
-            <div className="np-seekbar-fill" style={{ width: `${progress * 100}%` }} />
-            <div className="np-seekbar-handle" style={{ left: `${progress * 100}%` }} />
+            <div className="np-seekbar-fill" style={{ width: `${(dragProgress ?? progress) * 100}%` }} />
+            <div className="np-seekbar-handle" style={{ left: `${(dragProgress ?? progress) * 100}%` }} />
           </div>
           <span className="np-time">{formatTime(duration)}</span>
         </div>
@@ -332,7 +673,7 @@ const NowPlayingPanel = ({ onClose }) => {
           <button className={`np-ctrl-btn ${isShuffled ? 'ctrl-active' : ''}`} onClick={toggleShuffle} title="Shuffle">
             <FaRandom />
           </button>
-          <button className="np-skip-btn" onClick={prevTrack} title="Previous">
+          <button className="np-skip-btn" onClick={handlePrevTrack} title="Previous">
             <FaStepBackward />
           </button>
           <div className={`np-play-wrap ${isPlaying ? 'is-playing' : ''}`}>
@@ -340,7 +681,7 @@ const NowPlayingPanel = ({ onClose }) => {
               {isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: 3 }} />}
             </button>
           </div>
-          <button className="np-skip-btn" onClick={nextTrack} title="Next">
+          <button className="np-skip-btn" onClick={handleNextTrack} title="Next">
             <FaStepForward />
           </button>
           <button className={`np-ctrl-btn ${isRepeating ? 'ctrl-active' : ''}`} onClick={toggleRepeat} title="Repeat">

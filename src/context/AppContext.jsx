@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { fetchR2Library, WORKER_URL } from '../services/R2Service';
 
 const AppContext = createContext();
@@ -23,47 +23,51 @@ export const AppProvider = ({ children }) => {
   };
 
   // ── Navigation state ───────────────────────────────────────────────────
+  const ignoreNextPop = React.useRef(false);
   const [activeView, setActiveView] = useState('home');
   const [viewParam, setViewParam] = useState(null);
   const [navHistory, setNavHistory] = useState([{ view: 'home', param: null }]);
 
-  // ── Load R2 library once ───────────────────────────────────────────────
-  useEffect(() => {
-    const load = async () => {
+  // ── Load R2 library (extracted for reuse / refresh) ──────────────────
+  const loadLibrary = React.useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const { tracks, folders } = await fetchR2Library();
+
+      let cachedDurations = {};
+      let cachedMeta = {};
       try {
-        setIsLoading(true);
-        setLoadError(null);
-        const { tracks, folders } = await fetchR2Library();
+        cachedDurations = JSON.parse(localStorage.getItem('drivemusic_durations') || '{}');
+        cachedMeta = JSON.parse(localStorage.getItem('drivemusic_metadata') || '{}');
+      } catch { /* ignore */ }
 
-        let cachedDurations = {};
-        let cachedMeta = {};
-        try {
-          cachedDurations = JSON.parse(localStorage.getItem('drivemusic_durations') || '{}');
-          cachedMeta = JSON.parse(localStorage.getItem('drivemusic_metadata') || '{}');
-        } catch { /* ignore */ }
+      const hydratedTracks = (tracks || []).map(t => {
+        let updated = { ...t };
+        const durationMs = cachedDurations[t.id];
+        if (durationMs) {
+          const sec = Math.floor(durationMs / 1000);
+          updated.duration = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+          updated.durationMs = durationMs;
+        }
+        if (cachedMeta[t.id]) updated = { ...updated, ...cachedMeta[t.id], _metadataProbed: true };
+        return updated;
+      });
 
-        const hydratedTracks = (tracks || []).map(t => {
-          let updated = { ...t };
-          const durationMs = cachedDurations[t.id];
-          if (durationMs) {
-            const sec = Math.floor(durationMs / 1000);
-            updated.duration = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-            updated.durationMs = durationMs;
-          }
-          if (cachedMeta[t.id]) updated = { ...updated, ...cachedMeta[t.id], _metadataProbed: true };
-          return updated;
-        });
+      // Default sort: newest first (if uploadedAt is available)
+      hydratedTracks.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
 
-        setAllTracks(hydratedTracks);
-        setFolders(folders || []);
-      } catch {
-        setLoadError('Could not load your R2 library. Check your worker connection.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+      setAllTracks(hydratedTracks);
+      setFolders(folders || []);
+    } catch {
+      setLoadError('Could not load your R2 library. Check your worker connection.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  // ── Load R2 library once on mount ─────────────────────────────────────
+  useEffect(() => { loadLibrary(); }, [loadLibrary]);
 
   // ── Listen for late duration updates ──────────────────────────────────
   useEffect(() => {
@@ -85,41 +89,54 @@ export const AppProvider = ({ children }) => {
     [allTracks]
   );
 
-  // ── Background metadata discovery (sequential, throttled) ─────────────
-  useEffect(() => {
-    const tracksNeedingProbe = allTracks.filter(t =>
-      (!t.durationMs || t.artist === 'Unknown Artist' || t.coverUrl?.includes('images.unsplash.com')) && t.url
-    );
-    if (tracksNeedingProbe.length === 0) return;
+  // ── Background metadata discovery (fast, continuous queue) ─────────────
+  const probeQueueRef = useRef([]);
+  const isProbingRef = useRef(false);
 
-    let idx = 0;
-    let cancelled = false;
+  useEffect(() => {
+    // Identify tracks that need probing and haven't been probed yet
+    const unprobed = allTracks.filter(t =>
+      (!t.durationMs || t.artist === 'Unknown Artist' || t.coverUrl?.includes('images.unsplash.com')) && t.url && !t._metadataProbed
+    );
+    
+    // Append to queue if not already there
+    unprobed.forEach(t => {
+      if (!probeQueueRef.current.some(q => q.id === t.id)) {
+        probeQueueRef.current.push(t);
+      }
+    });
+
+    if (isProbingRef.current || probeQueueRef.current.length === 0) return;
+
+    isProbingRef.current = true;
+    const audio = new Audio();
+    audio.preload = 'metadata';
 
     const getDurationStr = (d) => {
       const s = Math.floor(d);
       return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     };
 
-    const audio = new Audio();
-    audio.preload = 'metadata';
+    const processNext = async () => {
+      if (probeQueueRef.current.length === 0) {
+        isProbingRef.current = false;
+        return;
+      }
 
-    const safeProbe = async () => {
-      if (cancelled || idx >= tracksNeedingProbe.length) return;
-      const track = tracksNeedingProbe[idx];
+      const track = probeQueueRef.current.shift();
 
       const finishAndNext = async (updates) => {
-        if (cancelled) return;
+        updates._metadataProbed = true; // Mark as probed to prevent infinite loops
         try {
           await fetch(`${WORKER_URL}/tracks/update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: track.id, ...updates }),
           });
-        } catch { /* non-critical */ }
+        } catch { /* ignore */ }
 
         setAllTracks(prev => prev.map(t => t.id === track.id ? { ...t, ...updates } : t));
-        idx++;
-        setTimeout(safeProbe, 1500);
+        setTimeout(processNext, 200); // Fast 200ms delay between tracks
       };
 
       audio.onloadedmetadata = () => {
@@ -129,9 +146,9 @@ export const AppProvider = ({ children }) => {
           updates.durationMs = Math.round(d * 1000);
           updates.duration = getDurationStr(d);
         }
-        const jsmediatags = window.jsmediatags;
-        if (jsmediatags) {
-          jsmediatags.read(track.url, {
+        
+        if (window.jsmediatags) {
+          window.jsmediatags.read(track.url, {
             onSuccess: (tag) => {
               const t = tag.tags;
               if (t.artist) updates.artist = t.artist;
@@ -149,16 +166,9 @@ export const AppProvider = ({ children }) => {
       audio.src = track.url;
     };
 
-    const timer = setTimeout(() => { if (!cancelled) safeProbe(); }, 5000);
+    processNext();
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      audio.onloadedmetadata = null;
-      audio.onerror = null;
-      audio.src = '';
-    };
-  }, [unprobedCount]); // FIX: stable numeric dep instead of inline .filter().length
+  }, [allTracks]);
 
   // ── Derived: artist map ────────────────────────────────────────────────
   const artistMap = useMemo(() =>
@@ -183,27 +193,44 @@ export const AppProvider = ({ children }) => {
 
   // ── Navigation helpers ─────────────────────────────────────────────────
   const navigate = (view, param = null, replace = false) => {
+    if (view === 'home' && activeView !== 'home') {
+      if (window.history.state?.appView) {
+        ignoreNextPop.current = true;
+        window.history.back();
+      }
+    } else if (activeView === 'home' && view !== 'home') {
+      // If a panel is open (state.panel) or replace is true, replace the current history entry
+      if (replace || window.history.state?.panel) {
+        window.history.replaceState({ appView: view, param }, '');
+      } else {
+        window.history.pushState({ appView: view, param }, '');
+      }
+    } else if (activeView !== 'home' && view !== 'home') {
+      // Off-home to another inner view -> replace state to keep stack flat
+      window.history.replaceState({ appView: view, param }, '');
+    }
+
     setActiveView(view);
     setViewParam(param);
-    // FIX: only clear search if NOT navigating to search view itself
     if (view !== 'search') {
       setSearchQuery('');
     }
-    if (replace || view === 'home') {
-      setNavHistory([{ view, param }]);
+    
+    if (view === 'home') {
+      setNavHistory([{ view: 'home', param: null }]);
     } else {
-      setNavHistory(prev => [...prev, { view, param }]);
+      setNavHistory([{ view: 'home', param: null }, { view, param }]);
     }
   };
 
   const goBack = () => {
-    if (navHistory.length <= 1) return;
-    const newHistory = [...navHistory];
-    newHistory.pop();
-    const prev = newHistory[newHistory.length - 1];
-    setNavHistory(newHistory);
-    setActiveView(prev.view);
-    setViewParam(prev.param);
+    if (window.history.state?.appView) {
+      ignoreNextPop.current = true;
+      window.history.back();
+    }
+    setActiveView('home');
+    setViewParam(null);
+    setNavHistory([{ view: 'home', param: null }]);
   };
 
   // ── History-aware setters for panels ──────────────────────────────────
@@ -214,6 +241,7 @@ export const AppProvider = ({ children }) => {
     } else {
       // If closing manually, and we are at the state we pushed, pop it
       if (window.history.state?.panel === 'np') {
+        ignoreNextPop.current = true;
         window.history.back();
       }
     }
@@ -226,6 +254,7 @@ export const AppProvider = ({ children }) => {
       window.history.pushState({ panel: 'nav' }, '');
     } else {
       if (window.history.state?.panel === 'nav') {
+        ignoreNextPop.current = true;
         window.history.back();
       }
     }
@@ -235,11 +264,28 @@ export const AppProvider = ({ children }) => {
   // ── History API for Back Gesture (Sidebar & NP Panel) ──────────────────
   useEffect(() => {
     const handlePopState = (e) => {
-      // Close panels if they are open when back gesture is used
-      // We don't call toggleNowPlaying/toggleMobileNav here because we don't 
-      // want to call history.back() again (it's already been popped).
-      if (mobileNavOpen) setMobileNavOpen(false);
-      if (showNowPlaying) setShowNowPlaying(false);
+      // If this was triggered programmatically by closing a panel, ignore it
+      if (ignoreNextPop.current) {
+        ignoreNextPop.current = false;
+        return;
+      }
+
+      // 1) Close panels if they are open (hardware back press)
+      if (mobileNavOpen) { setMobileNavOpen(false); return; }
+      if (showNowPlaying) { setShowNowPlaying(false); return; }
+      
+      // 2) Normal view navigation
+      if (e.state?.appView) {
+        // User popped forward? (edge case), or jumped history.
+        setActiveView(e.state.appView);
+        setViewParam(e.state.param);
+        setNavHistory([{ view: 'home', param: null }, { view: e.state.appView, param: e.state.param }]);
+      } else {
+        // Popped back to the base state
+        setActiveView('home');
+        setViewParam(null);
+        setNavHistory([{ view: 'home', param: null }]);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -255,6 +301,7 @@ export const AppProvider = ({ children }) => {
       viewMode, setViewMode,
       searchQuery, setSearchQuery,
       searchResults,
+      refreshLibrary: loadLibrary,
     }}>
       {children}
     </AppContext.Provider>

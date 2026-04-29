@@ -4,10 +4,13 @@ import { usePlaylists } from '../context/PlaylistContext';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import {
   FaPlay, FaPause, FaFolder, FaMusic, FaMicrophone,
-  FaTrash, FaChevronLeft, FaBars, FaEllipsisV, FaSearch,
+  FaTrash, FaChevronLeft, FaBars, FaEllipsisV, FaSearch, FaListUl, FaPlus, FaFolderPlus,
 } from 'react-icons/fa';
 import Player from './Player';
 import NowPlayingPanel from './NowPlayingPanel';
+import UploadModal from './UploadModal';
+import UploadIndicator from './UploadIndicator';
+import CreateFolderModal from './CreateFolderModal';
 import logo from '../assets/logo.png';
 import { MdPlaylistAdd } from 'react-icons/md';
 import { BiSearchAlt } from 'react-icons/bi';
@@ -16,8 +19,22 @@ import './MainView.css';
 // ── Track Table ──────────────────────────────────────────────────────────────
 const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = null }) => {
   const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
-  const { removeFromPlaylist } = usePlaylists();
+  const { removeFromPlaylist, playlists, addToPlaylist } = usePlaylists();
   const [hoveredRow, setHoveredRow] = useState(null);
+  const [playlistPickerTrackId, setPlaylistPickerTrackId] = useState(null);
+
+  const handleAddToPlaylist = (e, track) => {
+    e.stopPropagation();
+    setPlaylistPickerTrackId(prev => prev === track.id ? null : track.id);
+  };
+
+  // Close picker on outside click
+  React.useEffect(() => {
+    if (!playlistPickerTrackId) return;
+    const close = () => setPlaylistPickerTrackId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [playlistPickerTrackId]);
 
   if (tracks.length === 0) return <p className="track-empty">No tracks here yet.</p>;
 
@@ -69,7 +86,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
                   {track.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? (
                     <img src={track.coverUrl} alt={track.title} className="track-cover-mini" />
                   ) : (
-                    <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'cover', opacity: 0.8 }} />
+                    <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'contain', opacity: 0.8 }} />
                   )}
                   <div className="title-text-group">
                     <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
@@ -98,8 +115,39 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
               </td>
               <td className="td-artist ellipsis">{track.artist || 'Unknown Artist'}</td>
               <td className="td-time" style={{ textAlign: 'right' }}>{track.durationStr || track.duration || '--:--'}</td>
-              <td className="td-add-queue" onClick={(e) => { e.stopPropagation(); addToQueue(track); }} title="Add to Queue">
+              <td
+                className="td-add-queue"
+                style={{ position: 'relative' }}
+                onClick={(e) => handleAddToPlaylist(e, track)}
+                title="Add to Playlist"
+              >
                 <MdPlaylistAdd size={18} />
+                {playlistPickerTrackId === track.id && (
+                  <div
+                    className="playlist-picker-popup"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="playlist-picker-hdr">Add to Playlist</div>
+                    <button
+                      className="playlist-picker-item"
+                      onClick={() => { addToQueue(track); setPlaylistPickerTrackId(null); }}
+                    >
+                      <MdPlaylistAdd size={14} /> Play Next
+                    </button>
+                    {playlists.length === 0 && (
+                      <div className="playlist-picker-empty">No playlists yet</div>
+                    )}
+                    {playlists.map(pl => (
+                      <button
+                        key={pl.id}
+                        className="playlist-picker-item"
+                        onClick={() => { addToPlaylist(pl.id, track.id); setPlaylistPickerTrackId(null); }}
+                      >
+                        <FaListUl size={11} /> {pl.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </td>
               <td className="td-item-more-mob"><FaEllipsisV /></td>
               {playlistId && (
@@ -129,8 +177,14 @@ const MainView = () => {
     activeView, viewParam, navigate, goBack, canGoBack,
     showNowPlaying, setShowNowPlaying, setMobileNavOpen,
     searchQuery, setSearchQuery, searchResults,
+    refreshLibrary,
   } = useApp();
   const { playlists } = usePlaylists();
+
+  // Upload modal state — stores the target folder or null when closed
+  const [uploadTarget, setUploadTarget] = useState(null);
+  // Create folder modal state
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
 
   const getDisplayTitle = () => {
     switch (activeView) {
@@ -165,7 +219,7 @@ const MainView = () => {
                   {t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? (
                     <img src={t.coverUrl} alt={t.title} className="recent-cover" />
                   ) : (
-                    <img src={logo} alt="icon" className="recent-cover" style={{ objectFit: 'cover', opacity: 0.8 }} />
+                    <img src={logo} alt="icon" className="recent-cover" style={{ objectFit: 'contain', opacity: 0.8 }} />
                   )}
                 </div>
                 <div className="recent-track-info">
@@ -178,7 +232,17 @@ const MainView = () => {
         </div>
       )}
 
-      <div className="playlist-title-row" style={{ marginTop: 24 }}><h2 className="playlist-title">Folders</h2></div>
+      <div className="playlist-title-row" style={{ marginTop: 24 }}>
+        <h2 className="playlist-title">Folders</h2>
+        <button
+          className="folder-create-btn"
+          onClick={() => setShowCreateFolder(true)}
+          title="New folder"
+          aria-label="Create new folder"
+        >
+          <FaFolderPlus />
+        </button>
+      </div>
       <div className="folder-grid">
         {folders.map(f => (
           <div key={f.id} className="folder-card" onClick={() => navigate('folder', f.id)}>
@@ -212,7 +276,7 @@ const MainView = () => {
           {artists.map(name => (
             <div key={name} className="folder-card" onClick={() => navigate('artist-detail', name)}>
               <div className="folder-icon" style={{ padding: 0, overflow: 'hidden' }}>
-                <img src={logo} alt="artist" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
+                <img src={logo} alt="artist" style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.8 }} />
               </div>
               <div className="folder-info">
                 <span className="folder-name ellipsis">{name}</span>
@@ -230,10 +294,25 @@ const MainView = () => {
     const tracks = allTracks.filter(t => t.folderId === viewParam);
     return (
       <>
+        {/* Title row — hidden on mobile (replaced by topbar title) */}
         <div className="playlist-title-row main-page-title">
           <h2 className="playlist-title">{folder?.name || 'Folder'}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
+
+        {/* Upload button — always visible, sits above the track list */}
+        <div className="folder-upload-bar">
+          <span className="folder-upload-count">{tracks.length} tracks</span>
+          <button
+            className="folder-upload-btn"
+            onClick={() => setUploadTarget({ id: viewParam, name: folder?.name || 'Folder' })}
+            title={`Upload to ${folder?.name || 'Folder'}`}
+            aria-label="Upload song"
+          >
+            <FaPlus />
+          </button>
+        </div>
+
         <TrackTable tracks={tracks} context={{ type: 'FOLDER', name: folder?.name || 'Unknown Folder' }} />
       </>
     );
@@ -291,6 +370,26 @@ const MainView = () => {
         <NowPlayingPanel onClose={() => setShowNowPlaying(false)} />
       )}
 
+      {/* Create Folder Modal */}
+      {showCreateFolder && (
+        <CreateFolderModal
+          onClose={() => setShowCreateFolder(false)}
+          onCreated={() => {
+            setShowCreateFolder(false);
+            refreshLibrary?.();
+          }}
+        />
+      )}
+
+      {/* Upload Modal */}
+      {uploadTarget && (
+        <UploadModal
+          folderId={uploadTarget.id}
+          folderName={uploadTarget.name}
+          onClose={() => setUploadTarget(null)}
+        />
+      )}
+
       <div className="mv-topbar">
         <button className="mobile-menu-btn" onClick={() => setMobileNavOpen(true)} title="Menu">
           <FaBars />
@@ -303,13 +402,43 @@ const MainView = () => {
           </button>
         )}
         <div className="mv-spacer" />
+
+        {/* Upload indicator — spinning icon with queue panel */}
+        <UploadIndicator />
+
+        {/* Upload button — always visible in topbar when inside a folder */}
+        {activeView === 'folder' && viewParam && (() => {
+          const folder = folders.find(f => f.id === viewParam);
+          return (
+            <button
+              className="topbar-upload-btn"
+              onClick={() => setUploadTarget({ id: viewParam, name: folder?.name || 'Folder' })}
+              title={`Upload to ${folder?.name || 'Folder'}`}
+              aria-label="Upload song"
+            >
+              <FaPlus />
+            </button>
+          );
+        })()}
       </div>
+
 
       <div className="mv-scroll" style={{ paddingTop: 8 }}>
         {isLoading ? (
           <div className="track-loading">
-            <div className="loading-spinner" />
-            <p>Loading Your Songs...</p>
+            <div className="track-skeleton-list">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="track-skeleton-row">
+                  <div className="track-skeleton-num skeleton" />
+                  <div className="track-skeleton-cover skeleton" />
+                  <div className="track-skeleton-info">
+                    <div className="track-skeleton-title skeleton" />
+                    <div className="track-skeleton-artist skeleton" />
+                  </div>
+                  <div className="track-skeleton-duration skeleton" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : loadError ? (
           <p className="track-error">⚠ {loadError}</p>

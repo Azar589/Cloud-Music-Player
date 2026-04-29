@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { AppProvider } from './context/AppContext';
 import { PlaylistProvider } from './context/PlaylistContext';
+import { UploadProvider } from './context/UploadContext';
+import { useUpload, STATUS } from './context/UploadContext';
 import Sidebar from './components/Sidebar';
 import MainView from './components/MainView';
 import './App.css';
@@ -56,7 +58,20 @@ class ErrorBoundary extends React.Component {
 // ── Layout (inner — needs context) ─────────────────────────────────────────
 const AppLayout = () => {
   const { currentTrack } = useAudioPlayer();
-  const { showNowPlaying } = useApp();
+  const { showNowPlaying, refreshLibrary } = useApp();
+  const { items } = useUpload();
+
+  // ── Auto-refresh library when any upload finishes ────────────────────────
+  // Tracks the previous done count so we only react to NEW completions.
+  const prevDoneRef = useRef(0);
+  useEffect(() => {
+    const doneCount = items.filter(i => i.status === STATUS.DONE).length;
+    if (doneCount > prevDoneRef.current) {
+      // At least one new file just completed — pull fresh track list
+      refreshLibrary?.();
+    }
+    prevDoneRef.current = doneCount;
+  }, [items, refreshLibrary]);
 
   return (
     <div className={`app-container ${showNowPlaying ? 'np-expanded' : ''}`}>
@@ -72,17 +87,20 @@ const AppLayout = () => {
   );
 };
 
-// ── Root ────────────────────────────────────────────────────────────────────
+
+// ── Root — ErrorBoundary is INSIDE providers so context is always available ─
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AppProvider>
+    <AppProvider>
+      <UploadProvider>
         <PlaylistProvider>
           <AudioPlayerProvider>
-            <AppLayout />
+            <ErrorBoundary>
+              <AppLayout />
+            </ErrorBoundary>
           </AudioPlayerProvider>
         </PlaylistProvider>
-      </AppProvider>
-    </ErrorBoundary>
+      </UploadProvider>
+    </AppProvider>
   );
 }

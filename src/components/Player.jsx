@@ -113,6 +113,20 @@ const Player = () => {
 
   return (
     <div className="player">
+      {/* ── Top Seekbar ── */}
+      <div
+        className={`player-top-seekbar ${isDownloading ? 'loading' : ''}`}
+        onMouseDown={handleSeekDrag}
+        onTouchStart={handleSeekDrag}
+        onClick={e => e.stopPropagation()}
+        style={{ pointerEvents: noTrack ? 'none' : 'auto' }}
+      >
+        <div className="player-progress-bg">
+          <div className="player-progress-fill" style={{ width: `${progress * 100}%` }} />
+          <div className="player-progress-handle" style={{ left: `${progress * 100}%` }} />
+        </div>
+      </div>
+
       <div 
         className="player-inner" 
         onClick={() => currentTrack && setShowNowPlaying(true)}
@@ -132,7 +146,7 @@ const Player = () => {
               src={logo}
               alt="logo"
               className="now-playing-cover"
-              style={{ objectFit: 'cover', opacity: 0.8 }}
+              style={{ objectFit: 'contain', opacity: 0.8 }}
             />
           )}
           <div className="now-playing-text">
@@ -141,9 +155,11 @@ const Player = () => {
           </div>
         </div>
 
-        {/* ── Center: Controls + Seekbar ── */}
+        {/* ── Center: Controls ── */}
         <div className="player-center">
           <div className="player-controls" onClick={e => e.stopPropagation()}>
+            <span className="player-time" style={{ marginRight: '8px' }}>{formatTime(currentTime)}</span>
+            
             <button className={`p-ctrl-btn ${isShuffled ? 'ctrl-active' : ''}`} onClick={toggleShuffle} title="Shuffle">
               <FaRandom />
             </button>
@@ -163,23 +179,8 @@ const Player = () => {
             <button className={`p-ctrl-btn ${isRepeating ? 'ctrl-active' : ''}`} onClick={toggleRepeat} title="Repeat">
               <FaRedoAlt />
             </button>
-          </div>
 
-          {/* Seekbar — mouse + touch */}
-          <div className="player-seekbar-row" onClick={e => e.stopPropagation()}>
-            <span className="player-time">{formatTime(currentTime)}</span>
-            <div
-              className={`player-progress-wrap ${isDownloading ? 'loading' : ''}`}
-              onMouseDown={handleSeekDrag}
-              onTouchStart={handleSeekDrag}
-              style={{ pointerEvents: noTrack ? 'none' : 'auto' }}
-            >
-              <div className="player-progress-bg">
-                <div className="player-progress-fill" style={{ width: `${progress * 100}%` }} />
-                <div className="player-progress-handle" style={{ left: `${progress * 100}%` }} />
-              </div>
-            </div>
-            <span className="player-time">{formatTime(duration)}</span>
+            <span className="player-time" style={{ marginLeft: '8px' }}>{formatTime(duration)}</span>
           </div>
         </div>
 
@@ -244,6 +245,7 @@ const Player = () => {
                       src={currentTrack.coverUrl && !currentTrack.coverUrl.includes('images.unsplash.com') ? currentTrack.coverUrl : logo} 
                       alt={currentTrack.title} 
                       className="queue-item-cover" 
+                      style={{ objectFit: 'contain' }}
                     />
                     <div className="queue-item-info">
                       <div className="queue-item-title ellipsis">{currentTrack.title}</div>
