@@ -30,7 +30,7 @@ const NowPlayingPanel = ({ onClose }) => {
     isShuffled, isRepeating, queue, recentlyPlayed,
     sleepTimeLeft, playbackContext, startSleepTimer, clearSleepTimer,
     playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
-    updateVolume, toggleMute, seek, setQueue, addToQueue
+    updateVolume, toggleMute, seek, setQueue, addToQueue, dominantColor
   } = useAudioPlayer();
 
   const { viewMode, setViewMode } = useApp();
@@ -66,8 +66,6 @@ const NowPlayingPanel = ({ onClose }) => {
   // Background crossfade
   const bgNextRef = useRef(null);
   const bgNextSrc = useRef('');
-  const bgColorOverlayRef = useRef(null); // solid color overlay for palette crossfade
-  const dominantColorCache = useRef({});  // imgSrc -> 'r,g,b'
   const carouselRef = pagerRailRef;
 
   const currentIdx = currentTrack ? queue.findIndex(t => t.id === currentTrack.id) : -1;
@@ -187,13 +185,39 @@ const NowPlayingPanel = ({ onClose }) => {
       translateYRef.current = diff;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        if (overlayRef.current) overlayRef.current.style.transform = `translateY(${diff}px)`;
+        const isPopupOpen = showQueue || showSleep || showMoreOptions;
+        if (isPopupOpen) {
+          // If a popup is open, we drag the popup itself instead of the whole panel
+          const popup = document.querySelector('.queue-popup, .sleep-popup, .more-popup');
+          if (popup) popup.style.transform = `translateY(${diff}px)`;
+        } else {
+          if (overlayRef.current) overlayRef.current.style.transform = `translateY(${diff}px)`;
+        }
       });
     }
   };
 
   const onTouchEnd = () => {
     const dist = translateYRef.current;
+    const isPopupOpen = showQueue || showSleep || showMoreOptions;
+
+    if (isPopupOpen) {
+      const popup = document.querySelector('.queue-popup, .sleep-popup, .more-popup');
+      if (dist > 70) {
+        // Dismiss the popup
+        setShowQueue(false);
+        setShowSleep(false);
+        setShowMoreOptions(false);
+        // We don't need to animate it back since the state change will unmount/hide it
+      } else if (popup) {
+        // Snap the popup back to its original position
+        popup.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+        popup.style.transform = 'translateY(0px)';
+      }
+      translateYRef.current = 0;
+      return;
+    }
+
     if (dist > 100) {
       if (overlayRef.current) {
         overlayRef.current.style.transition = 'transform 0.38s cubic-bezier(0.4, 0, 1, 1), opacity 0.35s ease';
@@ -243,54 +267,6 @@ const NowPlayingPanel = ({ onClose }) => {
   // ── Pager constants (80% card, 10% peek each side, 16dp gap) ──
   const CARD_FRACTION = 0.85;
   const CARD_GAP = 16;
-
-  // ── Color Extraction ──
-  const extractDominantColor = (imgSrc, callback) => {
-    if (!imgSrc || imgSrc === logo) { callback('20,20,30'); return; }
-    if (dominantColorCache.current[imgSrc]) { callback(dominantColorCache.current[imgSrc]); return; }
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 40; canvas.height = 40;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, 40, 40);
-        const d = ctx.getImageData(0, 0, 40, 40).data;
-        let r = 0, g = 0, b = 0, n = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          // Skip near-black and near-white pixels for a more vibrant result
-          const brightness = (d[i] + d[i + 1] + d[i + 2]) / 3;
-          if (brightness > 20 && brightness < 230) {
-            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
-          }
-        }
-        if (n === 0) { callback('20,20,30'); return; }
-        // Boost saturation slightly
-        const avg = `${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)}`;
-        dominantColorCache.current[imgSrc] = avg;
-        callback(avg);
-      } catch { callback('20,20,30'); }
-    };
-    img.onerror = () => callback('20,20,30');
-    img.src = imgSrc;
-  };
-
-  const applyDominantColor = (imgSrc, transition = true) => {
-    extractDominantColor(imgSrc, (rgb) => {
-      if (!bgColorOverlayRef.current) return;
-      bgColorOverlayRef.current.style.transition = transition
-        ? 'background-color 400ms linear, opacity 400ms linear'
-        : 'none';
-      bgColorOverlayRef.current.style.backgroundColor = `rgba(${rgb}, 0.55)`;
-      bgColorOverlayRef.current.style.opacity = '1';
-    });
-  };
-
-  // Apply color on mount and track change
-  React.useEffect(() => {
-    applyDominantColor(coverSrc, true);
-  }, [coverSrc]); // eslint-disable-line
 
   // ── Per-card scale/opacity interpolation ──
   const updateCardStyles = (railX) => {
@@ -537,7 +513,14 @@ const NowPlayingPanel = ({ onClose }) => {
         style={{ opacity: 0 }}
       />
       {/* Dominant color overlay — crossfades 400ms on track change */}
-      <div className="np-bg-color" ref={bgColorOverlayRef} />
+      <div 
+        className="np-bg-color" 
+        style={{ 
+          backgroundColor: `rgb(${dominantColor})`,
+          opacity: 1,
+          transition: 'background-color 400ms linear'
+        }} 
+      />
       {/* Dark vignette for text legibility */}
       <div className="np-bg-vignette" />
 

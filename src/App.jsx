@@ -6,6 +6,7 @@ import { UploadProvider } from './context/UploadContext';
 import { useUpload, STATUS } from './context/UploadContext';
 import Sidebar from './components/Sidebar';
 import MainView from './components/MainView';
+import MobileNavPlayer from './components/MobileNavPlayer';
 import './App.css';
 
 import { useAudioPlayer } from './context/AudioPlayerContext';
@@ -83,6 +84,7 @@ const AppLayout = () => {
       )}
       {!showNowPlaying && <Sidebar />}
       <MainView />
+      <MobileNavPlayer />
     </div>
   );
 };

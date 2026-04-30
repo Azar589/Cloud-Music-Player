@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import logo from '../assets/logo.png';
 
 const AudioPlayerContext = createContext();
 export const useAudioPlayer = () => useContext(AudioPlayerContext);
@@ -32,6 +33,8 @@ export const AudioPlayerProvider = ({ children }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [sleepTimeLeft, setSleepTimeLeft] = useState(null);
   const [playbackContext, setPlaybackContext] = useState({ type: 'ALL SONGS', name: 'Music Library' });
+  const [dominantColor, setDominantColor] = useState('20,20,30');
+  const dominantColorCache = useRef({}); // imgSrc -> 'r,g,b'
 
   // ── Stable refs so callbacks never capture stale state ─────────────────
   const volumeRef = useRef(volume);
@@ -490,11 +493,64 @@ export const AudioPlayerProvider = ({ children }) => {
 
   }, [currentTrack, isPlaying]);
 
+  // ── Dominant Color Extraction ──
+  useEffect(() => {
+    const getCoverSrc = (track) => track?.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? track.coverUrl : logo;
+    const imgSrc = getCoverSrc(currentTrack);
+
+    if (!imgSrc || imgSrc === logo) {
+      setDominantColor('20,20,30');
+      return;
+    }
+    if (dominantColorCache.current[imgSrc]) {
+      setDominantColor(dominantColorCache.current[imgSrc]);
+      return;
+    }
+
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40; canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 40, 40);
+        const d = ctx.getImageData(0, 0, 40, 40).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const brightness = (d[i] + d[i + 1] + d[i + 2]) / 3;
+          if (brightness > 20 && brightness < 230) {
+            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+          }
+        }
+        if (n === 0) {
+          setDominantColor('20,20,30');
+          return;
+        }
+        const avg = `${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)}`;
+        dominantColorCache.current[imgSrc] = avg;
+        setDominantColor(avg);
+      } catch {
+        setDominantColor('20,20,30');
+      }
+    };
+    img.onerror = () => setDominantColor('20,20,30');
+    img.src = imgSrc;
+  }, [currentTrack]);
+
+  const isLight = useMemo(() => {
+    if (!dominantColor) return false;
+    const [r, g, b] = dominantColor.split(',').map(Number);
+    // HSP color model brightness formula for better perceptual accuracy
+    const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b));
+    return hsp > 165; // Threshold where we should switch to dark text
+  }, [dominantColor]);
+
   return (
     <AudioPlayerContext.Provider value={{
       isPlaying, isDownloading, currentTrack, volume, progress, currentTime, duration,
       isShuffled, isRepeating, queue, recentlyPlayed,
-      sleepTimeLeft, playbackContext, startSleepTimer, clearSleepTimer,
+      sleepTimeLeft, playbackContext, dominantColor, isLight, startSleepTimer, clearSleepTimer,
       playTrack, nextTrack, prevTrack, togglePlay, toggleShuffle, toggleRepeat,
       updateVolume, toggleMute, seek, setQueue: setQueueList, addToQueue,
       setProgress, setCurrentTime

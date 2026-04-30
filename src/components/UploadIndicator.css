@@ -23,7 +23,7 @@
 
 .upload-indicator-btn.active {
   background: rgba(160, 56, 255, 0.18);
-  box-shadow: 0 0 0 1px rgba(160, 56, 255, 0.3);
+  box-shadow: 0 0 0 1px #a038ff4d;
 }
 
 .upload-indicator-btn.idle {

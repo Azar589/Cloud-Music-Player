@@ -14,7 +14,7 @@
 .mv-topbar {
   display: flex;
   align-items: center;
-  padding: 16px 20px 8px;
+  padding: -16px 20px 8px;
 }
 
 .mv-nav-arrows {
@@ -54,6 +54,12 @@
   padding: 0 16px 80px 16px;
   /* give bottom space for player */
   scrollbar-width: thin;
+}
+
+@media (max-width: 768px) {
+  .mv-scroll {
+    padding-bottom: 160px;
+  }
 }
 
 /* ── Recent Played ── */
@@ -191,65 +197,78 @@
 /* ── Folder/Artist Grid ── */
 .folder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
   margin-bottom: 24px;
 }
 
 .folder-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 16px;
+  background: #18181b;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 12px;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   cursor: pointer;
-  transition: transform var(--transition-bounce), background var(--transition-fast);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 @media (hover: hover) {
   .folder-card:hover {
-    transform: translateY(-2px);
-    background: var(--bg-elevated);
+    transform: translateY(-6px);
+    background: #202024;
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
   }
 }
 
 .folder-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: rgba(160, 56, 255, 0.18);
-  color: var(--color-primary-light);
+  width: 100%;
+  aspect-ratio: 1/1;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #A038FF 0%, #6038FF 100%);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1.6rem;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(160, 56, 255, 0.25);
+  transition: transform 0.3s ease;
+}
+
+.folder-card:hover .folder-icon {
+  transform: scale(1.05);
 }
 
 .folder-icon img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  mix-blend-mode: screen;
+  object-fit: cover;
+  border-radius: 8px;
 }
 
 .folder-info {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  width: 100%;
 }
 
 .folder-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ffffff;
+  margin-bottom: 2px;
 }
 
 .folder-count {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
 }
 
 /* ── Trending ── */
@@ -795,7 +814,7 @@
   }
 
   .folder-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
     gap: 12px;
   }
 
@@ -992,7 +1011,9 @@
 }
 
 /* Search view */
-.search-view { padding: 0; }
+.search-view {
+  padding: 0;
+}
 
 /* ── Folder Upload Button ── */
 .folder-upload-btn {
@@ -1025,7 +1046,8 @@
 
 /* ── Folder Upload Bar — always visible row above track list ── */
 .folder-upload-bar {
-  display: none; /* replaced by topbar button */
+  display: none;
+  /* replaced by topbar button */
 }
 
 .folder-upload-count {
@@ -1078,9 +1100,9 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(160, 56, 255, 0.15);
-  border: 1px solid rgba(160, 56, 255, 0.3);
-  color: var(--color-primary, #a038ff);
+  background: var(--color-primary, #a038ff);
+  border: none;
+  color: #fff;
   font-size: 0.88rem;
   cursor: pointer;
   flex-shrink: 0;
@@ -1099,4 +1121,37 @@
 }
 
 
-
+.desktop-player-only {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .desktop-player-only {
+    display: none !important;
+  }
+}
+
+/* ── Create Playlist Card ── */
+.create-card {
+  border: 2px dashed rgba(255, 255, 255, 0.1) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.create-card:hover {
+  border-color: var(--color-primary) !important;
+  background: rgba(160, 56, 255, 0.05) !important;
+}
+
+.create-icon {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: none !important;
+}
+
+.create-card:hover .create-icon {
+  background: rgba(160, 56, 255, 0.1) !important;
+  border-color: var(--color-primary) !important;
+  color: var(--color-primary) !important;
+}

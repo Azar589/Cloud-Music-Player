@@ -340,30 +340,7 @@
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 260px;
-    z-index: 999;
-    background: rgba(18, 18, 18, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
-  }
-
-  .sidebar.mobile-nav-open {
-    transform: translateX(0);
-  }
-
-  .sidebar-close-btn {
-    display: none;
-  }
-
-  .sidebar-search {
-    display: none;
+    display: none !important;
   }
 }
 

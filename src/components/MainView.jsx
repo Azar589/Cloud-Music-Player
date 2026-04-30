@@ -11,6 +11,7 @@ import NowPlayingPanel from './NowPlayingPanel';
 import UploadModal from './UploadModal';
 import UploadIndicator from './UploadIndicator';
 import CreateFolderModal from './CreateFolderModal';
+import CreatePlaylistModal from './CreatePlaylistModal';
 import logo from '../assets/logo.png';
 import { MdPlaylistAdd } from 'react-icons/md';
 import { BiSearchAlt } from 'react-icons/bi';
@@ -179,12 +180,13 @@ const MainView = () => {
     searchQuery, setSearchQuery, searchResults,
     refreshLibrary,
   } = useApp();
-  const { playlists } = usePlaylists();
+  const { playlists, createPlaylist } = usePlaylists();
 
   // Upload modal state — stores the target folder or null when closed
   const [uploadTarget, setUploadTarget] = useState(null);
   // Create folder modal state
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
 
   const getDisplayTitle = () => {
     switch (activeView) {
@@ -197,7 +199,7 @@ const MainView = () => {
       case 'playlist-detail':
         const pl = playlists.find(p => p.id === viewParam);
         return pl ? pl.name : 'Playlist';
-      default: return 'Cloud Music';
+      default: return 'Playlist';
     }
   };
 
@@ -346,6 +348,37 @@ const MainView = () => {
     );
   };
 
+  const renderPlaylists = () => (
+    <>
+      <div className="playlist-title-row main-page-title">
+        <h2 className="playlist-title">Your Playlists</h2>
+      </div>
+      <div className="folder-grid">
+        <div className="folder-card create-card" onClick={() => setShowCreatePlaylist(true)}>
+          <div className="folder-icon create-icon" style={{ background: 'var(--bg-elevated)', color: 'var(--color-primary)' }}>
+            <FaPlus />
+          </div>
+          <div className="folder-info">
+            <span className="folder-name ellipsis">Create New</span>
+            <span className="folder-count">Add a playlist</span>
+          </div>
+        </div>
+        {playlists.map(pl => (
+          <div key={pl.id} className="folder-card" onClick={() => navigate('playlist-detail', pl.id)}>
+            <div className="folder-icon"><FaListUl /></div>
+            <div className="folder-info">
+              <span className="folder-name ellipsis">{pl.name}</span>
+              <span className="folder-count">{pl.trackIds.length} tracks</span>
+            </div>
+          </div>
+        ))}
+        {playlists.length === 0 && (
+          <p className="track-empty" style={{ gridColumn: '1/-1' }}>No playlists yet. Create one from the sidebar!</p>
+        )}
+      </div>
+    </>
+  );
+
   // FIX: new search results view
   const renderSearch = () => (
     <div className="search-view">
@@ -381,6 +414,17 @@ const MainView = () => {
         />
       )}
 
+      {showCreatePlaylist && (
+        <CreatePlaylistModal
+          onClose={() => setShowCreatePlaylist(false)}
+          onCreated={(name) => {
+            const id = createPlaylist(name);
+            setShowCreatePlaylist(false);
+            if (id) navigate('playlist-detail', id);
+          }}
+        />
+      )}
+
       {/* Upload Modal */}
       {uploadTarget && (
         <UploadModal
@@ -391,9 +435,7 @@ const MainView = () => {
       )}
 
       <div className="mv-topbar">
-        <button className="mobile-menu-btn" onClick={() => setMobileNavOpen(true)} title="Menu">
-          <FaBars />
-        </button>
+        {/* Removed mobile-menu-btn to favor bottom nav */}
         <span className="mobile-logo-text">{getDisplayTitle()}</span>
 
         {canGoBack && (
@@ -468,13 +510,18 @@ const MainView = () => {
             {activeView === 'artists' && renderArtists()}
             {activeView === 'folder' && renderFolderDetail()}
             {activeView === 'artist-detail' && renderArtistDetail()}
+            {activeView === 'playlists' && renderPlaylists()}
             {activeView === 'playlist-detail' && renderPlaylistDetail()}
             {activeView === 'search' && renderSearch()}
           </div>
         )}
       </div>
 
-      {!showNowPlaying && <Player />}
+      {!showNowPlaying && (
+        <div className="desktop-player-only">
+          <Player />
+        </div>
+      )}
     </section>
   );
 };
