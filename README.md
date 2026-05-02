@@ -1,45 +1,57 @@
 # Cloud Music Player (r2-music-player)
 
-A modern, responsive web application for streaming music directly from Cloudflare R2 storage. Designed with a premium aesthetic and rich features for a seamless listening experience.
-
-## 🖼️ Preview
-
-### Desktop Main View Dashboard
-![Main Interface](docs/screenshots/main_view.png)
-
-### Playlist Tracking Grid
-![Playlist View](docs/screenshots/playlist_view.png)
-
-### Now Playing Overlay Screen
-![Now Playing Panel](docs/screenshots/now_playing.png)
+A modern, high-performance music streaming application built with React and Capacitor. Stream your music library directly from Cloudflare R2 with a premium, studio-grade matte aesthetic.
 
 ## 🌟 Features
 
--   **Dynamic Ambient Background**: Uses current track art to create an immersive listening atmosphere.
--   **Fully Responsive Layout**: Left sidebar and main content grid adjust dynamically for all screen sizes.
--   **Now Playing Panel**: Comprehensive overlay detail for track info, volume control, & playback state.
--   **Audio Queues & Playlists**: Fully interactive queue with sleep timer support and context providers for global app-wide control.
--   **Equalizer Animation**: Visually reacts with audio playback to enhance look and feel.
+-   **Cross-Platform Support**: Optimized for both Web and Mobile (Android/iOS) using Capacitor.
+-   **Dynamic Ambient UI**: Immersive background that adapts to the current track's album art.
+-   **Native Mobile Experience**: 
+    - Hardware back button support.
+    - Mini-player horizontal swipe gestures for track skipping.
+    - Opaque, high-fidelity matte design language.
+-   **Background Playback**: Keep the music going even when the app is in the background.
+-   **Advanced Audio Controls**:
+    - Sleep timer for late-night listening.
+    - Interactive queue management.
+    - Real-time equalizer visualizer.
+-   **Cloud Powered**: Seamless integration with Cloudflare R2 for efficient media storage and streaming.
 
 ## 🛠️ Technology Stack
 
--   **Frontend**: React 19 + Vite for extreme speed and HMR.
--   **Styling**: Vanilla CSS for smooth, tailored animations and high premium style benchmarks.
--   **Backend / Edge Functions**: Cloudflare Workers for processing streaming chunks or media ingestion template layouts.
+-   **Frontend**: React 19 + Vite
+-   **Mobile Framework**: Capacitor 8
+-   **Styling**: Vanilla CSS (Premium Matte Design System)
+-   **Backend**: Cloudflare Workers & R2 Storage
+-   **State Management**: React Context API
 
 ## 🚀 Getting Started
 
-To run the application locally:
+### 1. Web Development
 
-1.  **Clone the repository** (or download workspace files).
-2.  **Install dependencies**:
+1.  **Install dependencies**:
     ```bash
     npm install
     ```
-3.  **Start Dev Server**:
+2.  **Start Dev Server**:
     ```bash
-    npm.cmd run dev
+    npm run dev
     ```
     *The app will be available at [http://localhost:5173](http://localhost:5173)*
+
+### 2. Mobile Development (Android)
+
+1.  **Build the web project**:
+    ```bash
+    npm run build
+    ```
+2.  **Sync with Capacitor**:
+    ```bash
+    npx cap sync
+    ```
+3.  **Open in Android Studio**:
+    ```bash
+    npx cap open android
+    ```
 
 ---
