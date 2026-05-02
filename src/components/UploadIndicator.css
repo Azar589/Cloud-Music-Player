@@ -256,9 +256,10 @@
   .ui-panel {
     position: fixed;
     top: auto;
-    bottom: 80px;
+    bottom: calc(var(--player-height, 64px) + 60px + env(safe-area-inset-bottom, 0px) + 20px);
     right: 12px;
     left: 12px;
     width: auto;
+    z-index: 9999;
   }
 }

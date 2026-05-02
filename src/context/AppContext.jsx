@@ -112,13 +112,15 @@ export const AppProvider = ({ children }) => {
     const audio = new Audio();
     audio.preload = 'metadata';
 
+    let isMounted = true;
+
     const getDurationStr = (d) => {
       const s = Math.floor(d);
       return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     };
 
     const processNext = async () => {
-      if (probeQueueRef.current.length === 0) {
+      if (!isMounted || probeQueueRef.current.length === 0) {
         isProbingRef.current = false;
         return;
       }
@@ -136,7 +138,9 @@ export const AppProvider = ({ children }) => {
         } catch { /* ignore */ }
 
         setAllTracks(prev => prev.map(t => t.id === track.id ? { ...t, ...updates } : t));
-        setTimeout(processNext, 200); // Fast 200ms delay between tracks
+        if (isMounted) {
+          setTimeout(processNext, 200); // Fast 200ms delay between tracks
+        }
       };
 
       audio.onloadedmetadata = () => {
@@ -168,6 +172,15 @@ export const AppProvider = ({ children }) => {
 
     processNext();
 
+    return () => {
+      isMounted = false;
+      isProbingRef.current = false;
+      probeQueueRef.current = [];
+      audio.pause();
+      audio.src = '';
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+    };
   }, [allTracks]);
 
   // ── Derived: artist map ────────────────────────────────────────────────
@@ -227,6 +240,7 @@ export const AppProvider = ({ children }) => {
     if (window.history.state?.appView) {
       ignoreNextPop.current = true;
       window.history.back();
+      setTimeout(() => { ignoreNextPop.current = false; }, 150);
     }
     setActiveView('home');
     setViewParam(null);
@@ -243,6 +257,8 @@ export const AppProvider = ({ children }) => {
       if (window.history.state?.panel === 'np') {
         ignoreNextPop.current = true;
         window.history.back();
+        // Safety: if popstate never fires (edge case), reset flag after 150ms
+        setTimeout(() => { ignoreNextPop.current = false; }, 150);
       }
     }
     setShowNowPlaying(val);
@@ -256,6 +272,7 @@ export const AppProvider = ({ children }) => {
       if (window.history.state?.panel === 'nav') {
         ignoreNextPop.current = true;
         window.history.back();
+        setTimeout(() => { ignoreNextPop.current = false; }, 150);
       }
     }
     setMobileNavOpen(val);

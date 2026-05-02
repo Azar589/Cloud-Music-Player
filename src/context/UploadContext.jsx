@@ -21,8 +21,14 @@ export const UploadProvider = ({ children }) => {
   const { allTracks } = useApp();
   const [items, setItems] = useState([]);
   // itemsRef mirrors state so async callbacks never see stale values
-  const itemsRef   = useRef([]);
-  const runningRef = useRef(false);
+  const itemsRef      = useRef([]);
+  const runningRef    = useRef(false);
+  const allTracksRef  = useRef(allTracks);
+
+  // Keep allTracksRef in sync without triggering re-creation of stable functions
+  React.useEffect(() => {
+    allTracksRef.current = allTracks;
+  }, [allTracks]);
 
   // ── Sync helper: keeps ref + state in lock-step ────────────────────────
   const patch = useCallback((updater) => {
@@ -73,14 +79,18 @@ export const UploadProvider = ({ children }) => {
       
       const safeName = file.name.replace(/[^\w\s.\-()[\]]/g, '_');
       const expectedKey = folderId && folderId !== 'root' ? `${folderId}/${safeName}` : safeName;
-      const isDuplicate = allTracks.some(t => t.id === expectedKey);
+      
+      const isDuplicateInCloud = allTracksRef.current.some(t => t.id === expectedKey);
+      const isDuplicateInQueue = itemsRef.current.some(i => 
+        i.status !== STATUS.DONE && i.file.name === file.name && i.file.size === file.size
+      );
 
       let initialStatus = valid ? STATUS.PENDING : STATUS.ERROR;
       let initialError  = valid ? null : `".${ext}" not allowed`;
       
-      if (valid && isDuplicate) {
+      if (valid && (isDuplicateInCloud || isDuplicateInQueue)) {
         initialStatus = STATUS.ERROR;
-        initialError = 'Already exists in cloud';
+        initialError = isDuplicateInCloud ? 'Already exists in cloud' : 'Already in upload queue';
       }
 
       return {
@@ -103,7 +113,7 @@ export const UploadProvider = ({ children }) => {
 
     // Kick off after state update settles
     setTimeout(processNext, 0);
-  }, [patch, processNext, allTracks]);
+  }, [patch, processNext]); // allTracks removed from deps to keep enqueue stable
 
   const retryErrors = useCallback((adminSecret) => {
     patch(prev => prev.map(i =>
