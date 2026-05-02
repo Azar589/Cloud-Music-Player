@@ -17,6 +17,10 @@
   pointer-events: none;
 }
 
+.mobile-nav-player.panel-open * {
+  pointer-events: none !important;
+}
+
 @media (max-width: 768px) {
   .mobile-nav-player {
     display: flex;

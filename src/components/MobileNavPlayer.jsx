@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useApp } from '../context/AppContext';
 import { FaHome, FaMusic, FaMicrophone, FaListUl, FaPlay, FaPause, FaStepBackward, FaStepForward } from 'react-icons/fa';
@@ -9,13 +9,56 @@ const MobileNavPlayer = () => {
   const { currentTrack, isPlaying, togglePlay, nextTrack, prevTrack, dominantColor, isLight } = useAudioPlayer();
   const { activeView, navigate, setShowNowPlaying, showNowPlaying } = useApp();
 
+  // ── Swipe Logic ──────────────────────────────────────────────────────────
+  const touchStartX = useRef(null);
+  const touchEndX = useRef(null);
+
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e) => {
+    touchEndX.current = null;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const onTouchMove = (e) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const onTouchEnd = (e) => {
+    if (!touchStartX.current || !touchEndX.current) {
+      return;
+    }
+
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe || isRightSwipe) {
+      // Prevent the click event that opens NowPlaying if we swiped
+      e.stopPropagation();
+      if (isLeftSwipe) nextTrack();
+      if (isRightSwipe) prevTrack();
+    }
+
+    // Reset
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   return (
     <div className={`mobile-nav-player ${showNowPlaying ? 'panel-open' : ''}`}>
       {/* ── Mini Player ── */}
       {currentTrack && (
         <div 
           className={`mini-player ${isLight ? 'is-light' : ''}`} 
-          onClick={() => setShowNowPlaying(true)}
+          onClick={() => {
+            // Only open if we didn't perform a significant swipe
+            const distance = touchStartX.current && touchEndX.current ? Math.abs(touchStartX.current - touchEndX.current) : 0;
+            if (distance < 10) setShowNowPlaying(true);
+          }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           style={{ backgroundColor: `rgb(${dominantColor})` }}
         >
           <div className="mini-player-info">

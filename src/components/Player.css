@@ -405,7 +405,7 @@
 }
 
 @media (hover: hover) {
-  .volume-track:hover .volume-fill { background: var(--color-primary-light); }
+  .volume-track:hover .volume-fill { background: #A038FF; }
 }
 
 .volume-handle {

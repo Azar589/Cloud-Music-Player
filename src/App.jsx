@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { AppProvider } from './context/AppContext';
 import { PlaylistProvider } from './context/PlaylistContext';
@@ -73,6 +74,19 @@ const AppLayout = () => {
     }
     prevDoneRef.current = doneCount;
   }, [items, refreshLibrary]);
+
+  // ── Native Back Button Handling ──────────────────────────────────────────
+  useEffect(() => {
+    const handleBackButton = async () => {
+      // This triggers a 'popstate' event which AppContext already listens to
+      window.history.back();
+    };
+
+    const listener = CapacitorApp.addListener('backButton', handleBackButton);
+    return () => {
+      listener.then(l => l.remove());
+    };
+  }, []);
 
   return (
     <div className={`app-container ${showNowPlaying ? 'np-expanded' : ''}`}>

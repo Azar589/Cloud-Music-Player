@@ -17,11 +17,120 @@ import { MdPlaylistAdd } from 'react-icons/md';
 import { BiSearchAlt } from 'react-icons/bi';
 import './MainView.css';
 
+const TrackRow = React.memo(({ 
+  track, idx, isActive, isPlaying, playlistId, playlistPickerTrackId, 
+  onPlay, onToggle, onAddToPlaylist, onRemove, playlists, addToPlaylist, addToQueue, setPlaylistPickerTrackId 
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <tr
+      className={`track-row ${isActive ? 'row-active' : ''}`}
+      onClick={onToggle}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <td className="td-num">
+        <div className="td-num-content">
+          {isHovered
+            ? <span className={`row-play-icon ${isActive ? 'rp-active' : ''}`}>
+              {isActive && isPlaying ? <FaPause /> : <FaPlay />}
+            </span>
+            : (isActive && isPlaying
+              ? <span className="equaliser"><span /><span /><span /></span>
+              : <span className={isActive ? 'active-num' : ''}>{String(idx + 1).padStart(2, '0')}</span>
+            )
+          }
+        </div>
+      </td>
+      <td className="td-title">
+        <div className="title-cell">
+          {track.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? (
+            <img src={track.coverUrl} alt={track.title} className="track-cover-mini" />
+          ) : (
+            <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'contain', opacity: 0.8 }} />
+          )}
+          <div className="title-text-group">
+            <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
+            <span className="track-artist-sub">{track.artist || 'Unknown Artist'}</span>
+          </div>
+        </div>
+      </td>
+      <td className="td-quality">
+        {track.format ? (
+          <div className="quality-cell">
+            <span className="format-badge">{track.format}</span>
+            <span className="quality-text">
+              {(() => {
+                if (track.bitsPerSample && track.sampleRate) {
+                  return `${track.bitsPerSample}-Bit • ${track.sampleRate / 1000} kHz`;
+                }
+                if (track.quality) return track.quality;
+                const sizeBytes = track.size ? Number(track.size) : 0;
+                const durationSec = track.durationMs ? track.durationMs / 1000 : 0;
+                const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
+                return bitrate > 0 ? `${bitrate} kbps` : 'Standard';
+              })()}
+            </span>
+          </div>
+        ) : <span className="quality-text">Standard</span>}
+      </td>
+      <td className="td-artist ellipsis">{track.artist || 'Unknown Artist'}</td>
+      <td className="td-time" style={{ textAlign: 'right' }}>{track.durationStr || track.duration || '--:--'}</td>
+      <td
+        className="td-add-queue"
+        style={{ position: 'relative' }}
+        onClick={(e) => onAddToPlaylist(e, track)}
+        title="Add to Playlist"
+      >
+        <MdPlaylistAdd size={18} />
+        {playlistPickerTrackId === track.id && (
+          <div
+            className="playlist-picker-popup"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="playlist-picker-hdr">Add to Playlist</div>
+            <button
+              className="playlist-picker-item"
+              onClick={() => { addToQueue(track); setPlaylistPickerTrackId(null); }}
+            >
+              <MdPlaylistAdd size={14} /> Play Next
+            </button>
+            {playlists.length === 0 && (
+              <div className="playlist-picker-empty">No playlists yet</div>
+            )}
+            {playlists.map(pl => (
+              <button
+                key={pl.id}
+                className="playlist-picker-item"
+                onClick={() => { addToPlaylist(pl.id, track.id); setPlaylistPickerTrackId(null); }}
+              >
+                <FaListUl size={11} /> {pl.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </td>
+      <td className="td-item-more-mob"><FaEllipsisV /></td>
+      {playlistId && (
+        <td className="td-action">
+          <button
+            className="pl-remove-btn"
+            onClick={(e) => { e.stopPropagation(); onRemove(playlistId, track.id); }}
+            title="Remove from playlist"
+          >
+            <FaTrash />
+          </button>
+        </td>
+      )}
+    </tr>
+  );
+});
+
 // ── Track Table ──────────────────────────────────────────────────────────────
 const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = null }) => {
   const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
   const { removeFromPlaylist, playlists, addToPlaylist } = usePlaylists();
-  const [hoveredRow, setHoveredRow] = useState(null);
   const [playlistPickerTrackId, setPlaylistPickerTrackId] = useState(null);
 
   const handleAddToPlaylist = (e, track) => {
@@ -55,116 +164,27 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
         </thead>
       )}
       <tbody>
-        {tracks.map((track, idx) => {
-          const isActive = currentTrack?.id === track.id;
-          const isHov = hoveredRow === track.id;
-          return (
-            <tr
-              key={track.id}   // FIX: stable key — no idx suffix
-              className={`track-row ${isActive ? 'row-active' : ''}`}
-              onClick={() => {
-                if (isActive) togglePlay();
-                else { setQueue(tracks, context); playTrack(track, context); }
-              }}
-              onMouseEnter={() => setHoveredRow(track.id)}
-              onMouseLeave={() => setHoveredRow(null)}
-            >
-              <td className="td-num">
-                <div className="td-num-content">
-                  {isHov
-                    ? <span className={`row-play-icon ${isActive ? 'rp-active' : ''}`}>
-                      {isActive && isPlaying ? <FaPause /> : <FaPlay />}
-                    </span>
-                    : (isActive && isPlaying
-                      ? <span className="equaliser"><span /><span /><span /></span>
-                      : <span className={isActive ? 'active-num' : ''}>{String(idx + 1).padStart(2, '0')}</span>
-                    )
-                  }
-                </div>
-              </td>
-              <td className="td-title">
-                <div className="title-cell">
-                  {track.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? (
-                    <img src={track.coverUrl} alt={track.title} className="track-cover-mini" />
-                  ) : (
-                    <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'contain', opacity: 0.8 }} />
-                  )}
-                  <div className="title-text-group">
-                    <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
-                    <span className="track-artist-sub">{track.artist || 'Unknown Artist'}</span>
-                  </div>
-                </div>
-              </td>
-              <td className="td-quality">
-                {track.format ? (
-                  <div className="quality-cell">
-                    <span className="format-badge">{track.format}</span>
-                    <span className="quality-text">
-                      {(() => {
-                        if (track.bitsPerSample && track.sampleRate) {
-                          return `${track.bitsPerSample}-Bit • ${track.sampleRate / 1000} kHz`;
-                        }
-                        if (track.quality) return track.quality;
-                        const sizeBytes = track.size ? Number(track.size) : 0;
-                        const durationSec = track.durationMs ? track.durationMs / 1000 : 0;
-                        const bitrate = (sizeBytes && durationSec) ? Math.round((sizeBytes * 8) / (durationSec * 1024)) : 0;
-                        return bitrate > 0 ? `${bitrate} kbps` : 'Standard';
-                      })()}
-                    </span>
-                  </div>
-                ) : <span className="quality-text">Standard</span>}
-              </td>
-              <td className="td-artist ellipsis">{track.artist || 'Unknown Artist'}</td>
-              <td className="td-time" style={{ textAlign: 'right' }}>{track.durationStr || track.duration || '--:--'}</td>
-              <td
-                className="td-add-queue"
-                style={{ position: 'relative' }}
-                onClick={(e) => handleAddToPlaylist(e, track)}
-                title="Add to Playlist"
-              >
-                <MdPlaylistAdd size={18} />
-                {playlistPickerTrackId === track.id && (
-                  <div
-                    className="playlist-picker-popup"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="playlist-picker-hdr">Add to Playlist</div>
-                    <button
-                      className="playlist-picker-item"
-                      onClick={() => { addToQueue(track); setPlaylistPickerTrackId(null); }}
-                    >
-                      <MdPlaylistAdd size={14} /> Play Next
-                    </button>
-                    {playlists.length === 0 && (
-                      <div className="playlist-picker-empty">No playlists yet</div>
-                    )}
-                    {playlists.map(pl => (
-                      <button
-                        key={pl.id}
-                        className="playlist-picker-item"
-                        onClick={() => { addToPlaylist(pl.id, track.id); setPlaylistPickerTrackId(null); }}
-                      >
-                        <FaListUl size={11} /> {pl.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </td>
-              <td className="td-item-more-mob"><FaEllipsisV /></td>
-              {playlistId && (
-                <td className="td-action">
-                  <button
-                    className="pl-remove-btn"
-                    onClick={(e) => { e.stopPropagation(); removeFromPlaylist(playlistId, track.id); }}
-                    title="Remove from playlist"
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
-              )}
-            </tr>
-          );
-        })}
+        {tracks.map((track, idx) => (
+          <TrackRow
+            key={track.id}
+            track={track}
+            idx={idx}
+            isActive={currentTrack?.id === track.id}
+            isPlaying={isPlaying}
+            playlistId={playlistId}
+            playlistPickerTrackId={playlistPickerTrackId}
+            playlists={playlists}
+            addToPlaylist={addToPlaylist}
+            addToQueue={addToQueue}
+            setPlaylistPickerTrackId={setPlaylistPickerTrackId}
+            onRemove={removeFromPlaylist}
+            onAddToPlaylist={handleAddToPlaylist}
+            onToggle={() => {
+              if (currentTrack?.id === track.id) togglePlay();
+              else { setQueue(tracks, context); playTrack(track, context); }
+            }}
+          />
+        ))}
       </tbody>
     </table>
   );

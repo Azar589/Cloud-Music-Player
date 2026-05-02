@@ -72,9 +72,15 @@ const UploadModal = ({ folderId, folderName, onClose }) => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
+              accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac"
               multiple
-              style={{ display: 'none' }}
+              style={{ 
+                opacity: 0, 
+                position: 'absolute', 
+                pointerEvents: 'none', 
+                width: '1px', 
+                height: '1px' 
+              }}
               onChange={(e) => e.target.files.length && addFiles(e.target.files)}
             />
             {files.length === 0 ? (
