@@ -219,9 +219,6 @@ const NowPlayingPanel = ({ onClose }) => {
     }
 
     if (dist > 100) {
-      if (overlayRef.current) {
-        overlayRef.current.style.transition = 'transform 0.38s cubic-bezier(0.4, 0, 1, 1), opacity 0.35s ease';
-      }
       setIsClosing(true);
       setTimeout(onClose, 400);
     } else {
@@ -234,9 +231,6 @@ const NowPlayingPanel = ({ onClose }) => {
   };
 
   const handleClose = () => {
-    if (overlayRef.current) {
-      overlayRef.current.style.transition = 'transform 0.38s cubic-bezier(0.4, 0, 1, 1), opacity 0.35s ease';
-    }
     setIsClosing(true);
     setTimeout(onClose, 400);
   };
@@ -347,10 +341,19 @@ const NowPlayingPanel = ({ onClose }) => {
       pagerRailRef.current.style.transform = `translateX(${base}px)`;
       updateCardStyles(base);
     };
-    calcBase();
-    const ro = new ResizeObserver(calcBase);
-    if (pagerViewportRef.current) ro.observe(pagerViewportRef.current);
-    return () => ro.disconnect();
+
+    // Use a small timeout to let the CSS layout stabilize before JS takes over
+    // but without blocking the main entry animation.
+    const timer = setTimeout(() => {
+      calcBase();
+      const ro = new ResizeObserver(calcBase);
+      if (pagerViewportRef.current) ro.observe(pagerViewportRef.current);
+      return () => {
+        ro.disconnect();
+      };
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, []); // eslint-disable-line
 
   const handleArtTouchStart = (e) => {
@@ -493,9 +496,9 @@ const NowPlayingPanel = ({ onClose }) => {
     <div
       className={`np-overlay ${isClosing ? 'closing' : ''}`}
       ref={overlayRef}
-      style={{
-        transform: isClosing ? 'translateY(100vh)' : 'translateY(0px)',
-        opacity: isClosing ? 0 : 1,
+      style={isClosing ? {} : {
+        transform: 'translate3d(0, 0, 0)',
+        opacity: 1,
       }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
@@ -554,7 +557,7 @@ const NowPlayingPanel = ({ onClose }) => {
             <div className="np-pager-card" ref={pagerCardRefs[0]}>
               {prevTrackData ? (
                 <div className="np-squircle-cover-wrapper">
-                  <img src={getCoverSrc(prevTrackData)} alt="prev" className="np-squircle-cover" />
+                  <img src={getCoverSrc(prevTrackData)} alt="prev" className="np-squircle-cover" decoding="async" />
                 </div>
               ) : <div className="np-pager-card-empty" />}
             </div>
@@ -582,7 +585,14 @@ const NowPlayingPanel = ({ onClose }) => {
                       </div>
                     ) : (
                       <div className="np-squircle-cover-wrapper" style={{ marginTop: 0 }}>
-                        <img src={coverSrc || logo} alt="album" className="np-squircle-cover" style={{ objectFit: 'contain' }} />
+                        <img 
+                          src={coverSrc || logo} 
+                          alt="album" 
+                          className="np-squircle-cover" 
+                          style={{ objectFit: 'contain' }} 
+                          decoding="async"
+                          fetchpriority="high"
+                        />
                       </div>
                     )}
                   </div>
@@ -628,7 +638,7 @@ const NowPlayingPanel = ({ onClose }) => {
             <div className="np-pager-card" ref={pagerCardRefs[2]}>
               {nextTrackData ? (
                 <div className="np-squircle-cover-wrapper">
-                  <img src={getCoverSrc(nextTrackData)} alt="next" className="np-squircle-cover" />
+                  <img src={getCoverSrc(nextTrackData)} alt="next" className="np-squircle-cover" decoding="async" />
                 </div>
               ) : <div className="np-pager-card-empty" />}
             </div>

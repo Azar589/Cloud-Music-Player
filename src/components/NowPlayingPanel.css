@@ -18,27 +18,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: np-slide-up 0.6s cubic-bezier(0.19, 1, 0.22, 1);
-  transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+  animation: np-slide-up 0.6s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .np-overlay.closing {
-  opacity: 0;
+  animation: np-slide-down 0.45s cubic-bezier(0.45, 0, 0.55, 1) forwards;
   pointer-events: none;
 }
 
 @keyframes np-slide-up {
-  from {
-    transform: translateY(calc(100% - 132px)) scale(0.96);
-    opacity: 0;
-    border-radius: 20px;
-  }
+  from { transform: translate3d(0, 100%, 0); opacity: 0; }
+  to { transform: translate3d(0, 0, 0); opacity: 1; }
+}
 
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-    border-radius: 0;
-  }
+@keyframes np-slide-down {
+  from { transform: translate3d(0, 0, 0); opacity: 1; }
+  to { transform: translate3d(0, 100%, 0); opacity: 0; }
 }
 
 @keyframes np-fade-in {
@@ -70,45 +66,34 @@
   box-shadow: none;
 }
 
-.np-bg {
-  display: block;
+.np-bg, .np-bg-next, .np-bg-color, .np-bg-vignette {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
-  /* Reduced blur for matte feel, but we'll mostly rely on the solid color overlay */
-  filter: brightness(0.4);
-  transform: scale(1.1);
-  z-index: 0;
   pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
 }
 
-/* Incoming track bg overlay — sits above current bg, JS controls opacity */
+.np-bg {
+  background-size: cover;
+  background-position: center;
+  filter: brightness(0.4);
+  z-index: 0;
+}
+
 .np-bg-next {
   z-index: 1;
   opacity: 0;
-  will-change: opacity;
 }
 
-/* Dominant color overlay — JS sets background-color and crossfades 400ms */
 .np-bg-color {
-  position: absolute;
-  inset: 0;
   z-index: 2;
   opacity: 0;
-  pointer-events: none;
-  will-change: background-color, opacity;
 }
 
-/* Dark vignette gradient — linear from transparent to black@20% at bottom */
 .np-bg-vignette {
-  position: absolute;
-  inset: 0;
   z-index: 3;
-  background: linear-gradient(to bottom,
-      transparent 40%,
-      rgba(0, 0, 0, 0.20) 100%);
-  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 40%, rgba(0, 0, 0, 0.25) 100%);
 }
 
 /* Ensure panel content renders above the backgrounds */
@@ -1143,6 +1128,12 @@
     flex-direction: row;
     gap: 16px;
     will-change: transform;
+    /* CSS-driven geometry for instant layout on mount */
+    --card-w: 85vw;
+    --card-gap: 16px;
+    --peek: calc((100vw - var(--card-w)) / 2);
+    --base-x: calc(var(--peek) - (var(--card-w) + var(--card-gap)));
+    transform: translate3d(var(--base-x), 0, 0);
   }
 
   .np-pager-card {

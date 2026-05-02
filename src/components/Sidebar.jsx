@@ -18,6 +18,27 @@ const Sidebar = () => {
   } = useApp();
   const { playlists, createPlaylist, deletePlaylist } = usePlaylists();
 
+  // Local state for debouncing search
+  const [localSearch, setLocalSearch] = React.useState(searchQuery);
+
+  React.useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== searchQuery) {
+        setSearchQuery(localSearch);
+        if (localSearch.trim()) {
+          navigate('search', null);
+        } else {
+          navigate('home', null, true);
+        }
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localSearch, navigate, searchQuery, setSearchQuery]);
+
   const user = { name: 'Mohamed Azarudeen F', email: 'Cloudflare' };
   const logout = () => { };
 
@@ -43,14 +64,7 @@ const Sidebar = () => {
   ];
 
   const handleSearchChange = (e) => {
-    const val = e.target.value;
-    setSearchQuery(val);
-    // If there is a search query, show search results in main view
-    if (val.trim()) {
-      navigate('search', null);
-    } else {
-      navigate('home', null, true);
-    }
+    setLocalSearch(e.target.value);
   };
 
   return (
@@ -63,7 +77,7 @@ const Sidebar = () => {
 
         {/* Logo */}
         <div className="sidebar-logo">
-          <img src={logo} alt="Cloud Music" className="sidebar-logo-img" />
+          <img src={logo} alt="Cloud Music" className="sidebar-logo-img" loading="lazy" />
           <span>Cloud Player</span>
         </div>
 
@@ -73,7 +87,7 @@ const Sidebar = () => {
           <input
             type="text"
             placeholder="Search tracks..."
-            value={searchQuery}
+            value={localSearch}
             onChange={handleSearchChange}
           />
           {searchQuery && (
@@ -164,7 +178,7 @@ const Sidebar = () => {
         <div className="sidebar-user">
           <div className="user-avatar-box">
             {user?.picture
-              ? <img src={user.picture} alt={user.name} />
+              ? <img src={user.picture} alt={user.name} loading="lazy" />
               : <span>{user?.name?.[0] || 'U'}</span>}
           </div>
           <div className="user-text">

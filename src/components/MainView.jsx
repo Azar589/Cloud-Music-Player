@@ -46,9 +46,24 @@ const TrackRow = React.memo(({
       <td className="td-title">
         <div className="title-cell">
           {track.coverUrl && !track.coverUrl.includes('images.unsplash.com') ? (
-            <img src={track.coverUrl} alt={track.title} className="track-cover-mini" />
+            <img 
+              src={track.coverUrl} 
+              alt={track.title} 
+              className="track-cover-mini" 
+              decoding="async"
+              width="36"
+              height="36"
+            />
           ) : (
-            <img src={logo} alt="icon" className="track-cover-mini" style={{ objectFit: 'contain', opacity: 0.8 }} />
+            <img 
+              src={logo} 
+              alt="icon" 
+              className="track-cover-mini" 
+              style={{ objectFit: 'contain', opacity: 0.8 }} 
+              decoding="async"
+              width="36"
+              height="36"
+            />
           )}
           <div className="title-text-group">
             <span className={`track-title-text ${isActive ? 'text-active' : ''} ellipsis`}>{track.title}</span>
@@ -128,7 +143,10 @@ const TrackRow = React.memo(({
 });
 
 // ── Track Table ──────────────────────────────────────────────────────────────
-const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = null }) => {
+const ROW_HEIGHT = 56;
+const VISIBLE_BUFFER = 5;
+
+const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = null, scrollOffset = 0, containerHeight = 800 }) => {
   const { playTrack, togglePlay, currentTrack, isPlaying, setQueue, addToQueue } = useAudioPlayer();
   const { removeFromPlaylist, playlists, addToPlaylist } = usePlaylists();
   const [playlistPickerTrackId, setPlaylistPickerTrackId] = useState(null);
@@ -148,6 +166,14 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
 
   if (tracks.length === 0) return <p className="track-empty">No tracks here yet.</p>;
 
+  // Virtualization logic
+  const startIdx = Math.max(0, Math.floor(scrollOffset / ROW_HEIGHT) - VISIBLE_BUFFER);
+  const endIdx = Math.min(tracks.length, Math.ceil((scrollOffset + containerHeight) / ROW_HEIGHT) + VISIBLE_BUFFER);
+  const visibleTracks = tracks.slice(startIdx, endIdx);
+
+  const paddingTop = startIdx * ROW_HEIGHT;
+  const paddingBottom = (tracks.length - endIdx) * ROW_HEIGHT;
+
   return (
     <table className="track-table">
       {showHeader && (
@@ -164,11 +190,12 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
         </thead>
       )}
       <tbody>
-        {tracks.map((track, idx) => (
+        {paddingTop > 0 && <tr style={{ height: paddingTop }} aria-hidden="true"><td colSpan={7} /></tr>}
+        {visibleTracks.map((track, idx) => (
           <TrackRow
             key={track.id}
             track={track}
-            idx={idx}
+            idx={startIdx + idx}
             isActive={currentTrack?.id === track.id}
             isPlaying={isPlaying}
             playlistId={playlistId}
@@ -185,6 +212,7 @@ const TrackTable = ({ tracks, showHeader = true, playlistId = null, context = nu
             }}
           />
         ))}
+        {paddingBottom > 0 && <tr style={{ height: paddingBottom }} aria-hidden="true"><td colSpan={7} /></tr>}
       </tbody>
     </table>
   );
@@ -208,6 +236,55 @@ const MainView = () => {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
 
+  // Virtualization and scroll tracking
+  const scrollRef = React.useRef(null);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(800);
+
+  // Local search state for debouncing
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+
+  React.useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== searchQuery) {
+        setSearchQuery(localSearch);
+        if (localSearch.trim()) {
+          if (activeView !== 'search') navigate('search', null);
+        } else {
+          if (activeView !== 'home') navigate('home', null, true);
+        }
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localSearch, activeView, navigate, searchQuery, setSearchQuery]);
+
+  const handleScroll = (e) => {
+    setScrollOffset(e.target.scrollTop);
+  };
+
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      setContainerHeight(scrollRef.current.clientHeight);
+    }
+    const resizer = () => {
+      if (scrollRef.current) setContainerHeight(scrollRef.current.clientHeight);
+    };
+    window.addEventListener('resize', resizer);
+    return () => window.removeEventListener('resize', resizer);
+  }, []);
+
+  // When view changes, reset scroll
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+      setScrollOffset(0);
+    }
+  }, [activeView, viewParam]);
+
   const getDisplayTitle = () => {
     switch (activeView) {
       case 'home': return 'Home';
@@ -223,8 +300,6 @@ const MainView = () => {
     }
   };
 
-  // FIX: removed unused HERO_BG constant and unused recentCardSize state
-
   const renderHome = () => (
     <>
       <div className="playlist-title-row main-page-title" style={{ marginTop: 24 }}>
@@ -239,9 +314,24 @@ const MainView = () => {
               <div key={t.id} className="recent-card" onClick={() => { setQueue([t], { type: 'RECENTLY PLAYED', name: '' }); playTrack(t, { type: 'RECENTLY PLAYED', name: '' }); }}>
                 <div className="recent-cover-wrap">
                   {t.coverUrl && !t.coverUrl.includes('images.unsplash.com') ? (
-                    <img src={t.coverUrl} alt={t.title} className="recent-cover" />
+                    <img 
+                      src={t.coverUrl} 
+                      alt={t.title} 
+                      className="recent-cover" 
+                      decoding="async"
+                      width="160"
+                      height="160"
+                    />
                   ) : (
-                    <img src={logo} alt="icon" className="recent-cover" style={{ objectFit: 'contain', opacity: 0.8 }} />
+                    <img 
+                      src={logo} 
+                      alt="icon" 
+                      className="recent-cover" 
+                      style={{ objectFit: 'contain', opacity: 0.8 }} 
+                      decoding="async"
+                      width="160"
+                      height="160"
+                    />
                   )}
                 </div>
                 <div className="recent-track-info">
@@ -285,7 +375,12 @@ const MainView = () => {
   const renderSongs = () => (
     <>
       <div className="playlist-title-row main-page-title"><h2 className="playlist-title">All Songs</h2></div>
-      <TrackTable tracks={allTracks} context={{ type: 'PLAYLIST', name: 'All Songs' }} />
+      <TrackTable
+        tracks={allTracks}
+        context={{ type: 'PLAYLIST', name: 'All Songs' }}
+        scrollOffset={scrollOffset}
+        containerHeight={containerHeight}
+      />
     </>
   );
 
@@ -298,7 +393,12 @@ const MainView = () => {
           {artists.map(name => (
             <div key={name} className="folder-card" onClick={() => navigate('artist-detail', name)}>
               <div className="folder-icon" style={{ padding: 0, overflow: 'hidden' }}>
-                <img src={logo} alt="artist" style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.8 }} />
+                <img 
+                  src={logo} 
+                  alt="artist" 
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.8 }} 
+                  decoding="async"
+                />
               </div>
               <div className="folder-info">
                 <span className="folder-name ellipsis">{name}</span>
@@ -335,7 +435,12 @@ const MainView = () => {
           </button>
         </div>
 
-        <TrackTable tracks={tracks} context={{ type: 'FOLDER', name: folder?.name || 'Unknown Folder' }} />
+        <TrackTable
+          tracks={tracks}
+          context={{ type: 'FOLDER', name: folder?.name || 'Unknown Folder' }}
+          scrollOffset={scrollOffset}
+          containerHeight={containerHeight}
+        />
       </>
     );
   };
@@ -348,7 +453,12 @@ const MainView = () => {
           <h2 className="playlist-title">{viewParam}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
-        <TrackTable tracks={tracks} context={{ type: 'ARTIST', name: viewParam }} />
+        <TrackTable
+          tracks={tracks}
+          context={{ type: 'ARTIST', name: viewParam }}
+          scrollOffset={scrollOffset}
+          containerHeight={containerHeight}
+        />
       </>
     );
   };
@@ -363,7 +473,13 @@ const MainView = () => {
           <h2 className="playlist-title">{playlist.name}</h2>
           <span className="subtitle-count">{tracks.length} tracks</span>
         </div>
-        <TrackTable tracks={tracks} playlistId={playlist.id} context={{ type: 'PLAYLIST', name: playlist.name }} />
+        <TrackTable
+          tracks={tracks}
+          playlistId={playlist.id}
+          context={{ type: 'PLAYLIST', name: playlist.name }}
+          scrollOffset={scrollOffset}
+          containerHeight={containerHeight}
+        />
       </>
     );
   };
@@ -399,7 +515,6 @@ const MainView = () => {
     </>
   );
 
-  // FIX: new search results view
   const renderSearch = () => (
     <div className="search-view">
       <div className="playlist-title-row main-page-title">
@@ -412,7 +527,12 @@ const MainView = () => {
 
       {searchResults.length === 0
         ? <p className="track-empty">No tracks match your search.</p>
-        : <TrackTable tracks={searchResults} context={{ type: 'SEARCH RESULTS', name: searchQuery }} />
+        : <TrackTable
+          tracks={searchResults}
+          context={{ type: 'SEARCH RESULTS', name: searchQuery }}
+          scrollOffset={scrollOffset}
+          containerHeight={containerHeight}
+        />
       }
     </div>
   );
@@ -455,7 +575,6 @@ const MainView = () => {
       )}
 
       <div className="mv-topbar">
-        {/* Removed mobile-menu-btn to favor bottom nav */}
         <span className="mobile-logo-text">{getDisplayTitle()}</span>
 
         {canGoBack && (
@@ -465,10 +584,8 @@ const MainView = () => {
         )}
         <div className="mv-spacer" />
 
-        {/* Upload indicator — spinning icon with queue panel */}
         <UploadIndicator />
 
-        {/* Upload button — always visible in topbar when inside a folder */}
         {activeView === 'folder' && viewParam && (() => {
           const folder = folders.find(f => f.id === viewParam);
           return (
@@ -484,8 +601,7 @@ const MainView = () => {
         })()}
       </div>
 
-
-      <div className="mv-scroll" style={{ paddingTop: 8 }}>
+      <div className="mv-scroll" style={{ paddingTop: 8 }} ref={scrollRef} onScroll={handleScroll}>
         {isLoading ? (
           <div className="track-loading">
             <div className="track-skeleton-list">
@@ -506,21 +622,14 @@ const MainView = () => {
           <p className="track-error">⚠ {loadError}</p>
         ) : (
           <div className="mv-content">
-        {/* Persistent Mobile Search Bar to prevent focus loss during view transitions */}
         <div className="home-search-mobile">
           <BiSearchAlt className="hs-icon" />
           <input
             type="text"
             placeholder="Search tracks, artists..."
-            value={searchQuery}
+            value={localSearch}
             onChange={(e) => {
-              const val = e.target.value;
-              setSearchQuery(val);
-              if (val.trim()) {
-                if (activeView !== 'search') navigate('search', null);
-              } else {
-                if (activeView !== 'home') navigate('home', null, true);
-              }
+              setLocalSearch(e.target.value);
             }}
           />
         </div>
